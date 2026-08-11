@@ -110,8 +110,8 @@ export class SyncManager {
   // Export full JSON backup
   public async exportJSON(): Promise<string> {
     const backup = {
-      app: 'BOXER//OS',
-      version: '0.1.0',
+      app: 'LIFE//OS',
+      version: '2.0.0',
       exported_at: new Date().toISOString(),
       data: {
         profiles: await db.profiles.toArray(),
@@ -124,6 +124,12 @@ export class SyncManager {
         nutrition_logs: await db.nutrition_logs.toArray(),
         nutrition_targets: await db.nutrition_targets.toArray(),
         phase_progress: await db.phase_progress.toArray(),
+        skills: await db.skills.toArray(),
+        skill_prerequisites: await db.skill_prerequisites.toArray(),
+        knowledge_assessments: await db.knowledge_assessments.toArray(),
+        quests: await db.quests.toArray(),
+        ai_sessions: await db.ai_sessions.toArray(),
+        ai_actions: await db.ai_actions.toArray(),
       },
     };
     return JSON.stringify(backup, null, 2);
@@ -133,8 +139,8 @@ export class SyncManager {
   public async importJSON(jsonString: string): Promise<boolean> {
     try {
       const parsed = JSON.parse(jsonString);
-      if (parsed.app !== 'BOXER//OS' || !parsed.data) {
-        throw new Error('Invalid BOXER//OS backup file');
+      if ((parsed.app !== 'LIFE//OS' && parsed.app !== 'BOXER//OS') || !parsed.data) {
+        throw new Error('Invalid LIFE//OS backup file');
       }
 
       const { data } = parsed;
@@ -149,6 +155,12 @@ export class SyncManager {
         db.nutrition_logs,
         db.nutrition_targets,
         db.phase_progress,
+        db.skills,
+        db.skill_prerequisites,
+        db.knowledge_assessments,
+        db.quests,
+        db.ai_sessions,
+        db.ai_actions,
       ], async () => {
         if (data.profiles) await db.profiles.bulkPut(data.profiles);
         if (data.assessments) await db.assessments.bulkPut(data.assessments);
@@ -160,6 +172,12 @@ export class SyncManager {
         if (data.nutrition_logs) await db.nutrition_logs.bulkPut(data.nutrition_logs);
         if (data.nutrition_targets) await db.nutrition_targets.bulkPut(data.nutrition_targets);
         if (data.phase_progress) await db.phase_progress.bulkPut(data.phase_progress);
+        if (data.skills) await db.skills.bulkPut(data.skills);
+        if (data.skill_prerequisites) await db.skill_prerequisites.bulkPut(data.skill_prerequisites);
+        if (data.knowledge_assessments) await db.knowledge_assessments.bulkPut(data.knowledge_assessments);
+        if (data.quests) await db.quests.bulkPut(data.quests);
+        if (data.ai_sessions) await db.ai_sessions.bulkPut(data.ai_sessions);
+        if (data.ai_actions) await db.ai_actions.bulkPut(data.ai_actions);
       });
 
       return true;

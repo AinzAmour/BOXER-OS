@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// LIFE//OS v1.0  —  TypeScript Type Definitions
+// LIFE//OS v2.0  —  TypeScript Type Definitions
 // ─────────────────────────────────────────────────────────────
 
 // ── Sync Metadata (every synced record) ──────────────────────
@@ -11,6 +11,15 @@ export interface SyncMeta {
   device_id: string;
   deleted_at: string | null;
   sync_version: number;
+}
+
+// ── Constraints & Preferences ─────────────────────────────────
+export interface UserConstraints {
+  equipment?: string[];
+  daily_minutes?: number;
+  budget?: string;
+  location?: string;
+  cannot_do?: string[];
 }
 
 // ── Profile ──────────────────────────────────────────────────
@@ -26,6 +35,8 @@ export interface Profile extends SyncMeta {
   soya_free: boolean;
   level: number;
   xp: number;
+  constraints?: UserConstraints;
+  enabled_modules?: string[];
 }
 
 // ── Assessment (Baseline + Retests) ──────────────────────────
@@ -148,6 +159,14 @@ export type DomainType = 'body' | 'mind' | 'tech';
 export type SkillState = 'unknown' | 'discovered' | 'training' | 'practicing' | 'proficient' | 'mastered' | 'advanced';
 export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
+export interface SkillEvidence {
+  source: 'onboarding' | 'assessment' | 'session_log' | 'self_report';
+  claim: string;
+  value?: number;
+  confidence: 'self_reported' | 'observed' | 'assessed';
+  recorded_at: string;
+}
+
 export interface SkillNode extends SyncMeta {
   domain: DomainType;
   category: string;             // e.g. 'boxing', 'calisthenics', 'linux', 'networking'
@@ -159,6 +178,7 @@ export interface SkillNode extends SyncMeta {
   confidence: ConfidenceLevel;
   parent_skill_id: string | null; // Hierarchy Tree parent
   notes: string;
+  evidence?: SkillEvidence[];
 }
 
 export interface SkillPrerequisite {
@@ -185,10 +205,39 @@ export interface Quest extends SyncMeta {
   is_completed: boolean;
   completed_at: string | null;
   target_skill_ids: string[];
+  estimated_minutes?: number;
+  evidence_required?: string;
+}
+
+// ── Ciel Intelligence Layer & Audit ──────────────────────────
+export type CielMode =
+  | 'onboarding'
+  | 'cyber_mentor'
+  | 'boxing_coach'
+  | 'fitness_coach'
+  | 'weekly_review'
+  | 'scheduling'
+  | 'assessment';
+
+export type CielActionType =
+  | 'onboarding_complete'
+  | 'update_profile'
+  | 'create_skills'
+  | 'create_quests'
+  | 'record_evidence'
+  | 'reschedule'
+  | 'none';
+
+export interface AIAction extends SyncMeta {
+  session_id: string;
+  action_type: CielActionType;
+  proposed_data: string;        // JSON stringified
+  validation_result: 'passed' | 'failed' | 'partial';
+  records_created: string[];    // IDs of created records
 }
 
 export interface AISession extends SyncMeta {
-  session_type: 'assessment' | 'cyber_mentor' | 'boxing_coach' | 'fitness_coach' | 'weekly_review';
+  session_type: CielMode;
   prompt_summary: string;
   ai_response: string;
   provider_used: 'groq' | 'gemini';
@@ -209,3 +258,4 @@ export type TabId =
 
 // ── Sync State ───────────────────────────────────────────────
 export type SyncStatus = 'online' | 'syncing' | 'offline' | 'synced';
+

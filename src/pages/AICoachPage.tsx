@@ -1,46 +1,45 @@
-import { Bot, Send, Swords, Terminal, Dumbbell, Calendar, Sparkles, Clock, CalendarCheck, PlusCircle, CheckCircle } from 'lucide-react';
+import { Bot, Send, Swords, Terminal, Dumbbell, Calendar, Sparkles, Clock, CalendarCheck, PlusCircle, CheckCircle, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/dexie';
-import { askAICoach } from '../services/aiService';
-import type { Quest } from '../types';
+import { askCiel, type ChatMessage } from '../services/aiService';
+import type { Quest, CielMode } from '../types';
 
-type AssistantMode = 'private_assistant' | 'cyber_mentor' | 'boxing_coach' | 'fitness_coach' | 'weekly_review';
-
-const assistantModes: { id: AssistantMode; icon: typeof Bot; title: string; desc: string; color: string }[] = [
-  { id: 'private_assistant', icon: Bot,      title: 'Private Assistant', desc: 'Interactive Daily Scheduler & Time-Block Planner', color: 'border-accent-red text-accent-red' },
-  { id: 'cyber_mentor',      icon: Terminal, title: 'Cyber Mentor',      desc: 'Linux, TCP/IP, Wireshark, DFIR & Web Security',    color: 'border-accent-cyan text-accent-cyan' },
-  { id: 'boxing_coach',      icon: Swords,   title: 'Boxing Coach',      desc: 'Stance, Guard, 1-6 Punches & Combo Drills',        color: 'border-accent-gold text-accent-gold' },
-  { id: 'fitness_coach',     icon: Dumbbell, title: 'Fitness Coach',     desc: 'Calisthenics, Run-Fix Observations & Fat Loss',    color: 'border-status-success text-status-success' },
-  { id: 'weekly_review',     icon: Calendar, title: 'Weekly Review',     desc: 'Synthesize progress across BODY, MIND & TECH',     color: 'border-accent-purple text-accent-purple' },
+const assistantModes: { id: CielMode; icon: typeof Bot; title: string; desc: string; color: string }[] = [
+  { id: 'scheduling',     icon: Bot,      title: 'Private Assistant', desc: 'Interactive Daily Scheduler & Time-Block Planner', color: 'border-accent-red text-accent-red' },
+  { id: 'cyber_mentor',   icon: Terminal, title: 'Cyber Mentor',      desc: 'Linux, TCP/IP, Wireshark, DFIR & Web Security',    color: 'border-accent-cyan text-accent-cyan' },
+  { id: 'boxing_coach',   icon: Swords,   title: 'Boxing Coach',      desc: 'Stance, Guard, 1-6 Punches & Combo Drills',        color: 'border-accent-gold text-accent-gold' },
+  { id: 'fitness_coach',  icon: Dumbbell, title: 'Fitness Coach',     desc: 'Calisthenics, Run-Fix Observations & Fat Loss',    color: 'border-status-success text-status-success' },
+  { id: 'weekly_review',  icon: Calendar, title: 'Weekly Review',     desc: 'Synthesize progress across BODY, MIND & TECH',     color: 'border-accent-purple text-accent-purple' },
 ];
 
-interface ChatMessage {
+interface ChatDisplayMessage {
   sender: 'user' | 'ai';
   text: string;
   provider?: string;
+  actionMessage?: string;
   suggestedTasks?: string[];
 }
 
 export function AICoachPage() {
-  const [activeMode, setActiveMode] = useState<AssistantMode>('private_assistant');
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [activeMode, setActiveMode] = useState<CielMode>('scheduling');
+  const [messages, setMessages] = useState<ChatDisplayMessage[]>([
     {
       sender: 'ai',
       text:
-        `Greetings Fighter! I am your LIFE//OS Private Executive Assistant.\n\n` +
-        `I am here to manage your daily schedule, time-block your sessions, adapt your training to the current time of day, and answer any questions across Cyber, Boxing, and Fitness.\n\n` +
-        `How can I assist your schedule today?`,
-      provider: 'system',
+        `Greetings! I am Ciel, the intelligence layer behind LIFE//OS.\n\n` +
+        `I am here to manage your daily schedule, time-block your sessions, adapt your training to your current clock time, and analyze your progress across BODY, MIND, and TECH.\n\n` +
+        `How can I assist your system today?`,
+      provider: 'ciel',
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [addedTasks, setAddedTasks] = useState<string[]>([]);
 
-  // Live Dexie query for profile and quests
-  const profile = useLiveQuery(async () => await db.profiles.get('profile_default'), []);
-  const activeQuests = useLiveQuery(async () => await db.quests.where('is_completed').equals(0).toArray(), []) || [];
+  // Live Dexie query for profile and userId
+  const profile = useLiveQuery(async () => await db.profiles.toCollection().first(), []);
+  const userId = profile?.user_id || 'local_user';
 
   const handleSend = async (userPrompt?: string) => {
     const textToSend = userPrompt || input;
@@ -51,17 +50,19 @@ export function AICoachPage() {
     setLoading(true);
 
     try {
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const res = await askAICoach(textToSend, activeMode, {
-        currentTime: nowTime,
-        level: profile?.level || 1,
-        xp: profile?.xp || 150,
-        activeQuests: activeQuests.map((q: Quest) => q.title),
-        profileName: profile?.name || 'Mohammed Habibur Rahman',
-      });
+      const history: ChatMessage[] = messages
+        .filter((m) => m.sender === 'user' || m.sender === 'ai')
+        .map((m) => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text,
+        }));
+
+      history.push({ role: 'user', content: textToSend });
+
+      const res = await askCiel(activeMode, history, userId);
 
       // Extract sample tasks from response lines starting with • or -
-      const extractedTasks = res.reply
+      const extractedTasks = res.text
         .split('\n')
         .filter((line) => line.trim().startsWith('•') || line.trim().startsWith('-'))
         .map((line) => line.replace(/^[•\-]\s*/, '').trim())
@@ -71,15 +72,16 @@ export function AICoachPage() {
         ...prev,
         {
           sender: 'ai',
-          text: res.reply,
+          text: res.text,
           provider: res.provider,
+          actionMessage: res.actionResult?.message,
           suggestedTasks: extractedTasks.length > 0 ? extractedTasks : undefined,
         },
       ]);
     } catch {
       setMessages((prev) => [
         ...prev,
-        { sender: 'ai', text: 'Error contacting AI assistant. Please check your connection.', provider: 'error' },
+        { sender: 'ai', text: 'Error contacting Ciel AI assistant. Please check your connection.', provider: 'error' },
       ]);
     } finally {
       setLoading(false);
@@ -91,7 +93,7 @@ export function AICoachPage() {
     const questId = `quest_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const newQuest: Quest = {
       id: questId,
-      user_id: 'local_user',
+      user_id: userId,
       title: taskTitle,
       domain: activeMode === 'cyber_mentor' ? 'tech' : activeMode === 'boxing_coach' || activeMode === 'fitness_coach' ? 'body' : 'mind',
       xp_reward: 50,
@@ -115,7 +117,7 @@ export function AICoachPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Bot size={20} className="text-accent-red" />
-          <h2 className="text-lg font-bold">Private AI Executive Assistant</h2>
+          <h2 className="text-lg font-bold">Ciel Intelligence Layer</h2>
           <span className="badge bg-accent-red/15 text-accent-red text-[0.5625rem]">GROQ + GEMINI</span>
         </div>
         <div className="text-xs font-mono text-text-muted flex items-center gap-1">
@@ -133,7 +135,7 @@ export function AICoachPage() {
             <button
               key={m.id}
               onClick={() => setActiveMode(m.id)}
-              className={`glass-card p-3 text-left border transition-all flex flex-col justify-between ${
+              className={`glass-card p-3 text-left border transition-all flex flex-col justify-between cursor-pointer ${
                 isActive
                   ? `${m.color} bg-bg-card shadow-md`
                   : 'border-border-default text-text-muted hover:text-text-secondary'
@@ -152,15 +154,15 @@ export function AICoachPage() {
       {/* Interactive Quick Assistant Action Chips */}
       <div className="flex flex-wrap gap-1.5">
         {[
-          { label: "🕒 Reschedule Evening / Day", prompt: "Hey assistant, it's late in the day. Help me reschedule my remaining training and tasks so it suits my current time and energy." },
-          { label: "📅 Generate Time-Blocked Plan", prompt: "Please generate a time-blocked schedule for me balancing Body, Mind, and Tech based on my baseline and current goals." },
+          { label: "🕒 Reschedule Evening / Day", prompt: "Hey Ciel, it's late in the day. Help me reschedule my remaining training and tasks so it suits my current time and energy." },
+          { label: "📅 Generate Time-Blocked Plan", prompt: "Please generate a time-blocked schedule for me balancing Body, Mind, and Tech based on my current skill graph." },
           { label: "⚡ Interactive Check-in", prompt: "Ask me 3 quick interactive questions about my current time, sleep plan, and energy so we can customize my schedule." },
           { label: "🥊 Recommend Boxing Session", prompt: "Recommend an optimal shadowboxing drill and round breakdown for my next session." },
         ].map((chip) => (
           <button
             key={chip.label}
             onClick={() => handleSend(chip.prompt)}
-            className="btn btn-secondary text-[0.6875rem] py-1.5 px-3 rounded-full hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors"
+            className="btn btn-secondary text-[0.6875rem] py-1.5 px-3 rounded-full hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors cursor-pointer"
           >
             {chip.label}
           </button>
@@ -184,6 +186,14 @@ export function AICoachPage() {
               >
                 {msg.text}
 
+                {/* Executed Action Notification Badge */}
+                {msg.actionMessage && (
+                  <div className="mt-3 pt-2.5 border-t border-border-subtle flex items-center gap-1.5 text-accent-green font-mono text-[0.6875rem]">
+                    <CheckCircle2 size={13} />
+                    <span>{msg.actionMessage}</span>
+                  </div>
+                )}
+
                 {/* Suggested Tasks Sync Buttons */}
                 {msg.suggestedTasks && msg.suggestedTasks.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-border-subtle space-y-2">
@@ -197,7 +207,7 @@ export function AICoachPage() {
                           key={tIdx}
                           onClick={() => handlePushTaskToQuests(task)}
                           disabled={isAdded}
-                          className={`w-full text-left p-2 rounded-lg text-[0.6875rem] font-mono flex items-center justify-between border transition-all ${
+                          className={`w-full text-left p-2 rounded-lg text-[0.6875rem] font-mono flex items-center justify-between border transition-all cursor-pointer ${
                             isAdded
                               ? 'bg-status-success/15 border-status-success/30 text-status-success'
                               : 'bg-bg-card hover:bg-bg-card/80 border-border-default text-text-primary'
@@ -229,7 +239,7 @@ export function AICoachPage() {
           {loading && (
             <div className="flex items-center gap-2 text-xs text-text-muted animate-pulse">
               <Sparkles size={14} className="text-accent-red" />
-              <span>AI Executive Assistant analyzing schedule & time context...</span>
+              <span>Ciel AI analyzing context & Action Engine constraints...</span>
             </div>
           )}
         </div>
@@ -239,11 +249,11 @@ export function AICoachPage() {
           <input
             type="text"
             className="input text-xs"
-            placeholder={`Ask your Private Assistant (e.g. "It's 7 PM, what should I do tonight?")...`}
+            placeholder={`Ask Ciel (e.g. "It's 7 PM, what should I do tonight?")...`}
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button type="submit" disabled={loading || !input.trim()} className="btn btn-primary text-xs px-4">
+          <button type="submit" disabled={loading || !input.trim()} className="btn btn-primary text-xs px-4 cursor-pointer">
             <Send size={14} />
           </button>
         </form>
