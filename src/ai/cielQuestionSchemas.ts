@@ -6,7 +6,7 @@ export const CielQuestionSchema = z.object({
   field: z.string().min(1).max(100),
   question: z.string().min(1).max(500),
   options: z.array(z.string()).nullish(),
-  allow_custom: z.boolean().nullish(),
+  allow_custom: z.boolean().nullish().transform((v) => (v === undefined || v === null ? true : v)),
   min: z.coerce.number().nullish(),
   max: z.coerce.number().nullish(),
   step: z.coerce.number().nullish(),
@@ -14,8 +14,11 @@ export const CielQuestionSchema = z.object({
 
 export type CielQuestionProposal = z.infer<typeof CielQuestionSchema>;
 
+const STANDARD_ESCAPE_HATCHES = ['other', 'not sure', 'skip', 'skip for now', 'prefer not to say'];
+
 /**
  * Validates a client-submitted answer against the server question definition.
+ * Supports custom write-ins, "Other", "Not sure", and "Skip".
  */
 export function validateQuestionAnswer(
   question: CielQuestion,
@@ -28,13 +31,18 @@ export function validateQuestionAnswer(
   switch (question.type) {
     case 'single_select': {
       const strVal = String(answer).trim();
+      const lowerVal = strVal.toLowerCase();
+
       if (!question.options || question.options.length === 0) {
         return { valid: true };
       }
       if (question.options.includes(strVal)) {
         return { valid: true };
       }
-      if (question.allow_custom) {
+      if (question.allow_custom ?? true) {
+        return { valid: true };
+      }
+      if (STANDARD_ESCAPE_HATCHES.some((h) => lowerVal.includes(h))) {
         return { valid: true };
       }
       return {
@@ -51,14 +59,19 @@ export function validateQuestionAnswer(
       if (!question.options || question.options.length === 0) {
         return { valid: true };
       }
-      if (!question.allow_custom) {
-        const invalidItem = arr.find((item) => !question.options!.includes(String(item)));
-        if (invalidItem) {
-          return {
-            valid: false,
-            error: `Option "${invalidItem}" is not a valid selection`,
-          };
-        }
+      if (question.allow_custom ?? true) {
+        return { valid: true };
+      }
+      const invalidItem = arr.find(
+        (item) =>
+          !question.options!.includes(String(item)) &&
+          !STANDARD_ESCAPE_HATCHES.some((h) => String(item).toLowerCase().includes(h))
+      );
+      if (invalidItem) {
+        return {
+          valid: false,
+          error: `Option "${invalidItem}" is not a valid selection`,
+        };
       }
       return { valid: true };
     }
@@ -66,6 +79,11 @@ export function validateQuestionAnswer(
     case 'number': {
       const numVal = Number(answer);
       if (isNaN(numVal)) {
+        // Allow skip / not sure string responses in number questions
+        const strVal = String(answer).trim().toLowerCase();
+        if (STANDARD_ESCAPE_HATCHES.some((h) => strVal.includes(h))) {
+          return { valid: true };
+        }
         return { valid: false, error: 'Answer must be a valid number' };
       }
       if (question.min !== undefined && question.min !== null && numVal < question.min) {
@@ -78,6 +96,10 @@ export function validateQuestionAnswer(
     }
 
     case 'scale': {
+      const strVal = String(answer).trim().toLowerCase();
+      if (STANDARD_ESCAPE_HATCHES.some((h) => strVal.includes(h))) {
+        return { valid: true };
+      }
       const numVal = Number(answer);
       if (isNaN(numVal)) {
         return { valid: false, error: 'Scale answer must be a valid number' };
