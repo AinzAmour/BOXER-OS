@@ -1,24 +1,8 @@
 import { Footprints, Plus, AlertTriangle, MapPin, Thermometer } from 'lucide-react';
 import { useState } from 'react';
-import type { PainLocation, RunSymptom, RunSurface } from '../types';
-
-interface RunEntry {
-  id: number;
-  date: string;
-  duration_minutes: number;
-  distance_km: string;
-  surface: RunSurface;
-  footwear: string;
-  pace: string;
-  breathing_rpe: number;
-  leg_fatigue_rpe: number;
-  pain_score: number;
-  pain_locations: PainLocation[];
-  symptoms: RunSymptom[];
-  coach_feel: string;
-  coach_stopped: string;
-  coach_unusual: string;
-}
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db/dexie';
+import type { PainLocation, RunSymptom, RunSurface, RunningAttempt } from '../types';
 
 const PAIN_LOCATIONS: PainLocation[] = ['shin', 'knee', 'ankle', 'foot', 'hip', 'back'];
 const SYMPTOMS: { value: RunSymptom; label: string }[] = [
@@ -48,14 +32,14 @@ function RPESlider({ label, value, onChange }: { label: string; value: number; o
   );
 }
 
-function detectPatterns(entries: RunEntry[]): string[] {
+function detectPatterns(entries: RunningAttempt[]): string[] {
   if (entries.length < 3) return [];
   const patterns: string[] = [];
   const recent = entries.slice(0, 5);
 
   // Pain location patterns
   for (const loc of PAIN_LOCATIONS) {
-    const count = recent.filter((e) => e.pain_locations.includes(loc)).length;
+    const count = recent.filter((e) => e.pain_locations && e.pain_locations.includes(loc)).length;
     if (count >= 2) {
       patterns.push(
         `${loc.charAt(0).toUpperCase() + loc.slice(1)} discomfort appeared in ${count} of your last ${recent.length} running attempts.`
@@ -65,7 +49,7 @@ function detectPatterns(entries: RunEntry[]): string[] {
 
   // Symptom patterns
   for (const sym of SYMPTOMS) {
-    const count = recent.filter((e) => e.symptoms.includes(sym.value)).length;
+    const count = recent.filter((e) => e.symptoms && e.symptoms.includes(sym.value)).length;
     if (count >= 3) {
       patterns.push(
         `${sym.label} was reported in ${count} of your last ${recent.length} attempts.`
@@ -85,7 +69,6 @@ function detectPatterns(entries: RunEntry[]): string[] {
 }
 
 export function RunFixPage() {
-  const [entries, setEntries] = useState<RunEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     duration_minutes: '',
@@ -102,6 +85,9 @@ export function RunFixPage() {
     coach_stopped: '',
     coach_unusual: '',
   });
+
+  // Live Dexie query for running attempts
+  const entries = useLiveQuery(async () => await db.running_attempts.toArray(), []) || [];
 
   const togglePain = (loc: PainLocation) => {
     setForm({
@@ -121,12 +107,14 @@ export function RunFixPage() {
     });
   };
 
-  const handleSubmit = () => {
-    const entry: RunEntry = {
-      id: Date.now(),
-      date: new Date().toISOString().split('T')[0],
+  const handleSubmit = async () => {
+    const now = new Date().toISOString();
+    const entryId = `run_${Date.now()}`;
+    const newEntry: RunningAttempt = {
+      id: entryId,
+      user_id: 'local_user',
       duration_minutes: parseFloat(form.duration_minutes) || 0,
-      distance_km: form.distance_km,
+      distance_km: form.distance_km ? parseFloat(form.distance_km) : null,
       surface: form.surface,
       footwear: form.footwear,
       pace: form.pace,
@@ -138,8 +126,24 @@ export function RunFixPage() {
       coach_feel: form.coach_feel,
       coach_stopped: form.coach_stopped,
       coach_unusual: form.coach_unusual,
+      created_at: now,
+      updated_at: now,
+      device_id: localStorage.getItem('boxer_os_device_id') || 'dev_local',
+      deleted_at: null,
+      sync_version: 1,
     };
-    setEntries([entry, ...entries]);
+
+    await db.running_attempts.put(newEntry);
+
+    // Queue change for cloud sync
+    await db.sync_queue.add({
+      table_name: 'running_attempts',
+      operation: 'INSERT',
+      record_id: entryId,
+      payload: newEntry as unknown as Record<string, unknown>,
+      created_at: now,
+    });
+
     setShowForm(false);
     setForm({
       duration_minutes: '', distance_km: '', surface: 'tarmac',
@@ -301,10 +305,10 @@ export function RunFixPage() {
       )}
 
       {/* ── Attempt History ── */}
-      {entries.map((entry) => (
+      {entries.map((entry: RunningAttempt) => (
         <div key={entry.id} className="glass-card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold">{entry.date}</span>
+            <span className="text-sm font-bold">{entry.created_at.split('T')[0]}</span>
             <span className="text-xs text-text-muted">{entry.duration_minutes} min · {entry.surface}</span>
           </div>
 
@@ -323,7 +327,7 @@ export function RunFixPage() {
             </div>
           </div>
 
-          {entry.pain_locations.length > 0 && (
+          {entry.pain_locations && entry.pain_locations.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {entry.pain_locations.map((loc) => (
                 <span key={loc} className="badge bg-accent-red/10 text-accent-red text-[0.5625rem]">{loc}</span>
@@ -331,7 +335,7 @@ export function RunFixPage() {
             </div>
           )}
 
-          {entry.symptoms.length > 0 && (
+          {entry.symptoms && entry.symptoms.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {entry.symptoms.map((sym) => (
                 <span key={sym} className="badge bg-accent-gold/10 text-accent-gold text-[0.5625rem]">{sym.replace('_', ' ')}</span>

@@ -1,125 +1,126 @@
-# BOXER//OS v0.1.0
+# LIFE//OS v1.0.0
 
 <p align="center">
-  <img src="public/manifest.json" width="80" alt="BOXER//OS Logo" />
+  <img src="public/manifest.json" width="80" alt="LIFE//OS Logo" />
 </p>
 
 <h3 align="center">
-  <b>BOXER//OS</b> — Tactical Boxing Fitness, Diagnostics & Training PWA
+  <b>LIFE//OS</b> — Personal Development & Skill Mastery Operating System
 </h3>
 
 <p align="center">
-  <i>Offline-first Progressive Web Application for baseline tracking, running difficulty diagnosis, boxing training, audio round timing, and low-cost Indian Halal nutrition — synchronized across Windows and Android.</i>
+  <i>Offline-first Progressive Web Application for personal mastery across <b>BODY</b> (Boxing, Calisthenics, Running, Halal Nutrition), <b>MIND</b> (Study, Focus, Learning), and <b>TECH</b> (Cybersecurity, Linux, Networking, Web Security) — powered by a Personal Skill Graph, Adaptive Assessment Engine, and Serverless AI Mentors (Groq + Gemini).</i>
 </p>
 
 <p align="center">
   <a href="https://boxer-os.vercel.app"><b>Live App Demo</b></a> •
   <a href="#-architecture">Architecture</a> •
-  <a href="#-key-features">Key Features</a> •
+  <a href="#-core-modules">Core Modules</a> •
   <a href="#-database-schema">Database Schema</a> •
   <a href="#-getting-started">Getting Started</a>
 </p>
 
 ---
 
-## 🥊 Overview
+## 🚀 System Evolution (BOXER//OS → LIFE//OS)
 
-**BOXER//OS** is a high-performance, dark-tactical Progressive Web Application built specifically to structure and track a fighter's fitness progression. It replaces generic workout trackers with a dedicated combat OS HUD that manages:
+Originally launched as a combat fitness HUD, **LIFE//OS v1.0.0** expands boxing and fitness into major sub-modules within an all-encompassing personal progression operating system:
 
-1. **Immutable Baseline Entry #0**: Locked Day 0 performance metrics with automated trend diffs on all subsequent retests.
-2. **Run-Fix Diagnostics**: Structured observation logging (RPE, pain score, pain location, symptoms, footwear, coach reflections) with observational pattern detection.
-3. **Boxing Technique & Drill Engine**: Stance, guard, footwork, punch numbering (1–6), combo library, and a random combination generator.
-4. **Synthesized Round Timer**: Web Audio API programmatically generated boxing bell chimes (3:00 work / 1:00 rest / 10s warning) with visual progress ring.
-5. **Nutrition Hub (Indian, Halal, Soya-Free)**: Budget-friendly Indian Halal food directory, daily protein/calorie logging, and configurable target macros.
-6. **Phase Progression Roadmap**: Objective performance checklists across 4 fight training phases.
-7. **Fighter Access Gateway**: Supabase Auth & Google OAuth login with "Remember Me" device session persistence and offline fallback.
+```
+                                    LIFE//OS v1.0
+                                         │
+        ┌────────────────────────────────┼────────────────────────────────┐
+        │                                │                                │
+      BODY                              MIND                             TECH
+   ┌────┴────┐                      ┌────┴────┐                      ┌────┴────┐
+ Boxing    Fitness               Learning   Knowledge             Linux     Web
+ Calisthenics Running             Study     Reading               Networking Security
+ Nutrition                       Memory    Research              DFIR      SOC
+```
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-                         BOXER//OS
-                             │
-                 React 18 + TypeScript + Vite
-                             │
-                    Tailwind CSS v4 + PWA
-                             │
-              ┌──────────────┴──────────────┐
-              │                             │
-          Windows                        Android
-        Desktop PWA                    Mobile PWA
-              │                             │
-              └──────────────┬──────────────┘
-                             │
-                      IndexedDB (Dexie.js)
-                      ─ immediate local store ─
-                      ─ offline-first source ─
-                             │
-                   Sync Manager & Queue
-                             │
-                    HTTPS / Supabase Client
-                             │
-                 Supabase Cloud Service
-            ┌────────────────┴────────────────┐
-            │                                 │
-      Supabase Auth                     PostgreSQL DB
-  (Email + Google OAuth)              (Row Level Security)
-            │                                 │
-            └────────────────┬────────────────┘
-                             │
-                     Vercel Deployment
+                  Windows / Android Browser & Installed PWA
+                                    │
+                       React 18 + TypeScript + Vite
+                                    │
+                           Tailwind CSS v4
+                                    │
+             ┌──────────────────────┴──────────────────────┐
+             │                                             │
+      IndexedDB (Dexie.js v2)                      LIFE//OS AI Router
+   ─ immediate read/write ─                      ─ Vercel Serverless ─
+   ─ offline-first source ─                                │
+             │                                    AI Provider Manager
+       Sync Manager                                ┌───────┴───────┐
+             │                                     │               │
+     Supabase PostgreSQL                         Groq           Gemini
+   (RLS: auth.uid() = user_id)                (Primary)       (Fallback)
 ```
 
 ---
 
-## ⚡ Key Features
+## ⚡ Core Modules & Features
 
-### 📊 1. Baseline Entry #0 & Retest System
-- **Immutable Entry #0**: Locks Day 0 physical baseline stats (Height, Weight, Body Fat %, Waist, Push-ups, Squats, Pull-ups, Plank, Jump rope, Walk, Jog).
-- **Retest Tracking**: Log timestamped retests over time.
-- **Automated Diff Badges**: Displays visual indicators (`+5`, `-2 kg`) comparing current retest metrics against Day 0.
+### 👑 1. Solo-Leveling Command Center Dashboard (`DashboardPage.tsx`)
+- **Fighter Rank & XP System**: Visual level indicator (`LVL 1 - AINZ`) and animated XP progress bar.
+- **Domain Status Cards**: Real-time summary scores for **BODY**, **MIND**, and **TECH** domains.
+- **Daily Multi-Skill Missions**: Quests linked to target skill nodes that grant XP upon completion.
+- **Quick Module Launchers**: Instant launchers for Boxing Engine, Round Timer, Run-Fix, and AI Mentor.
 
-### 🏃 2. "Run-Fix" Running Diagnostic Investigation
-- **Structured Attempt Logging**: Captures Duration, Distance, Surface (Tarmac, Grass, Track, Treadmill, Dirt), Footwear, Pace, Breathing RPE (1-10), Leg Fatigue RPE (1-10), and Pain Score (0-10).
-- **Pain Location & Symptoms**: Interactive tags for Shin, Knee, Ankle, Foot, Hip, Back, Breathlessness, Tightness, etc.
-- **Coach Notes**: Qualitative reflections ("How did this feel?", "What stopped you?", "Anything unusual?").
-- **Observational Safety Rules**: Pattern recognition engine strictly uses observational language (e.g., *"Shin discomfort appeared in 3 of your last 4 attempts"*) rather than diagnostic claims.
+### 🕸️ 2. Personal Skill Graph Engine (`SkillGraphPage.tsx`)
+- **Multi-Metric Tracking**: Tracks **Knowledge %**, **Practical Ability %**, **Experience %**, and **Confidence Level** (`LOW`, `MEDIUM`, `HIGH`) per skill node.
+- **State Transitions**: `UNKNOWN` → `DISCOVERED` → `TRAINING` → `PRACTICING` → `PROFICIENT` → `MASTERED` → `ADVANCED`.
+- **Domain Skill Trees**:
+  - **BODY**: Boxing (Stance, Guard, Punches 1-6), Calisthenics (Push-ups, Pull-ups), Running (Brisk Walk).
+  - **MIND**: Deep Work Focus, Active Recall & Spaced Repetition.
+  - **TECH**: Linux CLI & Navigation, TCP/IP & OSI Fundamentals, Wireshark Packet Analysis, Web Security.
 
-### 🥊 3. Boxing Engine & Combo Generator
-- **Fundamental Skill Guide**: Stance, Guard, Footwork, 1-6 Punch Numbering (1: Jab, 2: Cross, 3: Lead Hook, 4: Rear Hook, 5: Lead Uppercut, 6: Rear Uppercut, Slips, Weaves).
-- **Combo Library**: Preset technical combination drills.
-- **Dynamic Combo Generator**: Programmatically generates random punch-slip combinations for shadowboxing rounds.
+### 🧠 3. Adaptive Assessment Engine (`AdaptiveAssessmentPage.tsx`)
+- **Adaptive Question Router**: Evaluates domain knowledge and propagates evaluation scores down to individual skill nodes in IndexedDB.
+- **No False Claims**: Unencountered skills remain `UNKNOWN` rather than defaulting to "Beginner".
+- **Prerequisite Enforcement**: Skill unlocks require verifiable performance evidence.
 
-### ⏱️ 4. Audio Synth Boxing Round Timer
-- **Web Audio API**: Synthesizes authentic boxing bell rings (work bell, rest bell, 10s warning chime) without requiring external audio files.
-- **Visual Progress Ring**: Dynamic color transitions (Red = Work, Teal = Rest, Gold = Warning, Success Green = Complete).
-- **Custom Presets**: Configurable work time, rest time, warning interval, and total rounds.
+### 🤖 4. Serverless AI Gateway (`api/ai.ts` & `AICoachPage.tsx`)
+- **Serverless Security**: Vercel API endpoint (`/api/ai.ts`) keeps `GROQ_API_KEY` and `GEMINI_API_KEY` 100% private on the server.
+- **Provider Fallback**: Groq (Primary for low latency) → Gemini 1.5/2.0 (Fallback for high availability).
+- **4 Dedicated Mentors**:
+  - **Cyber Mentor**: Linux, TCP/IP, Wireshark, DFIR, SOC & Web Security.
+  - **Boxing Coach**: Stance, Guard, 1-6 Punches & Combo Drills.
+  - **Fitness Coach**: Calisthenics, Run-Fix Observations & Fat Loss.
+  - **Weekly Reviewer**: Synthesizes consistency across BODY, MIND, and TECH.
 
-### 🍛 5. Halal Indian Nutrition Tracker
-- **Soya-Free Food Directory**: Seeded with low-cost Indian Halal staples (Eggs, Chicken, Dal, Chana, Rajma, Milk, Curd/Dahi, Paneer, Peanuts, Rice, Roti, Oats, Potato, Banana, Veggies).
-- **Configurable Macro Targets**: Adjustable protein and calorie goals labeled with clear starting guidance.
+### 📊 5. Baseline Entry #0 & Retests (`AssessmentsPage.tsx`)
+- **Immutable Entry #0**: Locks Day 0 physical baseline stats.
+- **Retest Tracking**: Timestamped retests logged directly to IndexedDB Dexie with automated diff badges (`+5`, `-2 kg`).
 
-### 🏆 6. Phase Progression Roadmap
-- **Phase 1**: Beginner Fitness (Fat loss + calisthenics + boxing mechanics).
-- **Phase 2**: Recreational Boxer (Sparring readiness + conditioning).
-- **Phase 3**: Serious Training (Fight IQ + advanced defense).
-- **Phase 4**: Long-Term "D" Goal.
-- **Objective Readiness Checklists**: Milestone criteria that must be satisfied to advance phases.
+### 🏃 6. "Run-Fix" Running Diagnostics (`RunFixPage.tsx`)
+- **Structured Attempt Logger**: Tracks RPE, Pain Score, Pain Location (Shin, Knee, Ankle, Foot, Hip, Back), Symptoms, Surface, and Footwear.
+- **Observational Safety Rules**: Pattern detection engine uses strictly non-diagnostic language.
 
-### 🔐 7. Fighter Access & Session Protection
-- **Email/Password & Google OAuth**: Seamless login options.
-- **"Remember Me" Persistence**: Stores encrypted session keys locally to prevent repetitive logins on personal devices.
-- **Service Worker v2**: Network-First PWA strategy ensuring fresh Vercel updates load immediately without stale cache locks.
+### 🥊 7. Boxing Engine & Audio Synth Round Timer (`BoxingPage.tsx` & `TimerPage.tsx`)
+- **Technique Guide & Combo Generator**: Stance, Guard, 1-6 Punch Numbering, and dynamic shadowboxing generator.
+- **Synthesized Round Timer**: Web Audio API generated boxing bell rings (3:00 work / 1:00 rest / 10s warning).
+
+### 🍛 8. Halal Indian Nutrition Hub (`NutritionPage.tsx`)
+- **Soya-Free Directory**: Low-cost Indian Halal staples (Eggs, Chicken, Dal, Chana, Rajma, Milk, Curd, Paneer, Peanuts, Rice, Roti, Oats).
+- **Daily Macro Log**: Live Dexie persistence tracking daily protein and calorie totals against configurable targets.
+
+### 🔐 9. Fighter Access & Service Worker v2 (`AuthPage.tsx` & `sw.js`)
+- **Email & Google OAuth**: Fast login options with "Remember Me" device session locking.
+- **Service Worker v2**: Network-First PWA caching strategy eliminating stale page locks on Android & Windows page reloads.
 
 ---
 
 ## 🗄️ Database Schema
 
-The database consists of 10 primary PostgreSQL tables configured with **Row Level Security (RLS)**:
+The database consists of 15 PostgreSQL & Dexie.js tables configured with **Row Level Security (RLS)**:
 
 ```sql
-profiles (id, user_id, name, age, height_cm, weight_kg, body_fat_pct, waist_inches, diet_type, is_halal, soya_free)
+profiles (id, user_id, name, age, height_cm, weight_kg, body_fat_pct, waist_inches, diet_type, is_halal, soya_free, level, xp)
 assessments (id, user_id, entry_number, is_baseline, weight_kg, body_fat_pct, waist_inches, pushups, squats, pullups, plank_seconds, jump_rope_seconds, walking_minutes, jogging_minutes, running_status, coach_notes)
 running_attempts (id, user_id, duration_minutes, distance_km, surface, footwear, pace, breathing_rpe, leg_fatigue_rpe, pain_score, pain_locations[], symptoms[], coach_feel, coach_stopped, coach_unusual)
 boxing_sessions (id, user_id, session_type, duration_minutes, rounds_completed, combos_practiced[], skills_worked[], intensity_rpe, coach_notes)
@@ -129,9 +130,16 @@ nutrition_foods (id, user_id, name, calories_per_100g, protein_per_100g, carbs_p
 nutrition_logs (id, user_id, log_date, food_id, food_name, quantity_grams, calories, protein, meal_type)
 nutrition_targets (id, user_id, calories_target, protein_target, label)
 phase_progress (id, user_id, phase_number, phase_name, status, criteria JSONB, unlocked_at, completed_at)
+skills (id, user_id, domain, category, name, state, knowledge_pct, practical_pct, experience_pct, confidence, parent_skill_id, notes)
+skill_prerequisites (id, skill_id, prerequisite_skill_id, required_practical_pct)
+knowledge_assessments (id, user_id, domain, category, evaluated_skill_ids[], score_pct, summary, gaps_identified[])
+quests (id, user_id, title, domain, xp_reward, is_completed, completed_at, target_skill_ids[])
+ai_sessions (id, user_id, session_type, prompt_summary, ai_response, provider_used)
 ```
 
-The SQL migration file is available at [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql).
+SQL Migrations:
+- [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql)
+- [`supabase/migrations/002_life_os_expansion.sql`](supabase/migrations/002_life_os_expansion.sql)
 
 ---
 
@@ -177,9 +185,9 @@ The SQL migration file is available at [`supabase/migrations/001_initial_schema.
 ## 📱 PWA Mobile Installation (Android & iOS)
 
 1. Open `https://boxer-os.vercel.app` in **Chrome** (Android) or **Safari** (iOS).
-2. **Android**: Tap the three dots (`⋮`) in the top right → select **Add to Home screen** / **Install app**.
+2. **Android**: Tap the three dots (`⋮`) in top right → select **Add to Home screen** / **Install app**.
 3. **iOS**: Tap the **Share** icon → select **Add to Home Screen**.
-4. Launch **BOXER//OS** as a standalone application directly from your phone's app drawer!
+4. Launch **LIFE//OS** as a standalone application directly from your phone's home screen!
 
 ---
 

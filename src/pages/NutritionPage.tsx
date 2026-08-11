@@ -1,40 +1,12 @@
 import { UtensilsCrossed, Plus, Search, Settings2 } from 'lucide-react';
 import { useState } from 'react';
-import type { MealType } from '../types';
-
-// ── Default Indian Halal Low-Cost Food Database (Soya-free) ──
-const DEFAULT_FOODS = [
-  { id: 'eggs',         name: 'Eggs',                cal: 155, protein: 13,  carbs: 1.1,  fat: 11,  lowCost: true },
-  { id: 'chicken',      name: 'Chicken Breast',      cal: 165, protein: 31,  carbs: 0,    fat: 3.6, lowCost: true },
-  { id: 'dal_moong',    name: 'Dal (Moong)',          cal: 105, protein: 7.5, carbs: 18,   fat: 0.4, lowCost: true },
-  { id: 'dal_masoor',   name: 'Dal (Masoor)',         cal: 116, protein: 9,   carbs: 20,   fat: 0.4, lowCost: true },
-  { id: 'chana',        name: 'Chana (Chickpeas)',    cal: 164, protein: 8.9, carbs: 27,   fat: 2.6, lowCost: true },
-  { id: 'rajma',        name: 'Rajma (Kidney Beans)', cal: 127, protein: 8.7, carbs: 22,   fat: 0.5, lowCost: true },
-  { id: 'milk',         name: 'Milk (Full Fat)',      cal: 62,  protein: 3.2, carbs: 4.8,  fat: 3.3, lowCost: true },
-  { id: 'curd',         name: 'Curd / Dahi',          cal: 60,  protein: 3.5, carbs: 4.7,  fat: 3.3, lowCost: true },
-  { id: 'paneer',       name: 'Paneer',               cal: 265, protein: 18,  carbs: 1.2,  fat: 20,  lowCost: false },
-  { id: 'peanuts',      name: 'Peanuts',               cal: 567, protein: 26,  carbs: 16,   fat: 49,  lowCost: true },
-  { id: 'rice',         name: 'Rice (Cooked)',         cal: 130, protein: 2.7, carbs: 28,   fat: 0.3, lowCost: true },
-  { id: 'roti',         name: 'Roti / Chapati',        cal: 120, protein: 3.5, carbs: 20,   fat: 3.5, lowCost: true },
-  { id: 'oats',         name: 'Oats',                  cal: 389, protein: 17,  carbs: 66,   fat: 7,   lowCost: true },
-  { id: 'potato',       name: 'Potato',                cal: 77,  protein: 2,   carbs: 17,   fat: 0.1, lowCost: true },
-  { id: 'banana',       name: 'Banana',                cal: 89,  protein: 1.1, carbs: 23,   fat: 0.3, lowCost: true },
-  { id: 'veggies',      name: 'Seasonal Vegetables',   cal: 35,  protein: 2,   carbs: 7,    fat: 0.2, lowCost: true },
-];
-
-interface MealLog {
-  id: number;
-  food_name: string;
-  quantity_grams: number;
-  calories: number;
-  protein: number;
-  meal_type: MealType;
-}
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db/dexie';
+import type { MealType, NutritionFood, NutritionLog } from '../types';
 
 export function NutritionPage() {
   const [activeView, setActiveView] = useState<'log' | 'foods' | 'targets'>('log');
   const [search, setSearch] = useState('');
-  const [meals, setMeals] = useState<MealLog[]>([]);
   const [calorieTarget, setCalorieTarget] = useState(2000);
   const [proteinTarget, setProteinTarget] = useState(150);
 
@@ -43,27 +15,52 @@ export function NutritionPage() {
   const [quantity, setQuantity] = useState('');
   const [mealType, setMealType] = useState<MealType>('lunch');
 
-  const todayMeals = meals; // In production: filter by today's date
-  const totalCalories = todayMeals.reduce((s, m) => s + m.calories, 0);
-  const totalProtein = todayMeals.reduce((s, m) => s + m.protein, 0);
+  // Live Dexie queries
+  const dbFoods = useLiveQuery(async () => await db.nutrition_foods.toArray(), []) || [];
+  const todayDate = new Date().toISOString().split('T')[0];
+  const dbLogs = useLiveQuery(async () => await db.nutrition_logs.where('log_date').equals(todayDate).toArray(), [todayDate]) || [];
 
-  const filteredFoods = DEFAULT_FOODS.filter((f) =>
+  const totalCalories = dbLogs.reduce((s: number, m: NutritionLog) => s + m.calories, 0);
+  const totalProtein = dbLogs.reduce((s: number, m: NutritionLog) => s + m.protein, 0);
+
+  const filteredFoods = dbFoods.filter((f: NutritionFood) =>
     f.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const addMeal = () => {
-    const food = DEFAULT_FOODS.find((f) => f.id === selectedFood);
+  const addMeal = async () => {
+    const food = dbFoods.find((f: NutritionFood) => f.id === selectedFood);
     if (!food || !quantity) return;
     const grams = parseFloat(quantity);
-    const entry: MealLog = {
-      id: Date.now(),
+    const now = new Date().toISOString();
+    const entryId = `meal_${Date.now()}`;
+    const entry: NutritionLog = {
+      id: entryId,
+      user_id: 'local_user',
+      log_date: todayDate,
+      food_id: food.id,
       food_name: food.name,
       quantity_grams: grams,
-      calories: Math.round((food.cal * grams) / 100),
-      protein: Math.round((food.protein * grams) / 100 * 10) / 10,
+      calories: Math.round((food.calories_per_100g * grams) / 100),
+      protein: Math.round((food.protein_per_100g * grams) / 100 * 10) / 10,
       meal_type: mealType,
+      created_at: now,
+      updated_at: now,
+      device_id: localStorage.getItem('boxer_os_device_id') || 'dev_local',
+      deleted_at: null,
+      sync_version: 1,
     };
-    setMeals([...meals, entry]);
+
+    await db.nutrition_logs.put(entry);
+
+    // Queue change for cloud sync
+    await db.sync_queue.add({
+      table_name: 'nutrition_logs',
+      operation: 'INSERT',
+      record_id: entryId,
+      payload: entry as unknown as Record<string, unknown>,
+      created_at: now,
+    });
+
     setSelectedFood(null);
     setQuantity('');
   };
@@ -145,8 +142,8 @@ export function NutritionPage() {
               onChange={(e) => setSelectedFood(e.target.value || null)}
             >
               <option value="">Select food...</option>
-              {DEFAULT_FOODS.map((f) => (
-                <option key={f.id} value={f.id}>{f.name} ({f.protein}g P / {f.cal} cal per 100g)</option>
+              {dbFoods.map((f: NutritionFood) => (
+                <option key={f.id} value={f.id}>{f.name} ({f.protein_per_100g}g P / {f.calories_per_100g} cal per 100g)</option>
               ))}
             </select>
 
@@ -169,8 +166,8 @@ export function NutritionPage() {
 
             {selectedFood && quantity && (
               <div className="text-xs text-text-secondary">
-                = {Math.round((DEFAULT_FOODS.find((f) => f.id === selectedFood)!.cal * parseFloat(quantity)) / 100)} cal,{' '}
-                {Math.round((DEFAULT_FOODS.find((f) => f.id === selectedFood)!.protein * parseFloat(quantity)) / 100 * 10) / 10}g protein
+                = {Math.round((dbFoods.find((f: NutritionFood) => f.id === selectedFood)!.calories_per_100g * parseFloat(quantity)) / 100)} cal,{' '}
+                {Math.round((dbFoods.find((f: NutritionFood) => f.id === selectedFood)!.protein_per_100g * parseFloat(quantity)) / 100 * 10) / 10}g protein
               </div>
             )}
 
@@ -180,17 +177,17 @@ export function NutritionPage() {
           </div>
 
           {/* Meal log */}
-          {todayMeals.length > 0 && (
+          {dbLogs.length > 0 && (
             <div className="space-y-2">
               {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((type) => {
-                const typeMeals = todayMeals.filter((m) => m.meal_type === type);
+                const typeMeals = dbLogs.filter((m: NutritionLog) => m.meal_type === type);
                 if (typeMeals.length === 0) return null;
                 return (
                   <div key={type}>
                     <h4 className="text-[0.625rem] font-bold text-text-muted tracking-widest uppercase mb-1.5">
                       {type}
                     </h4>
-                    {typeMeals.map((m) => (
+                    {typeMeals.map((m: NutritionLog) => (
                       <div key={m.id} className="glass-card p-3 flex items-center justify-between mb-1">
                         <div>
                           <span className="text-sm text-text-primary font-medium">{m.food_name}</span>
@@ -221,18 +218,18 @@ export function NutritionPage() {
             />
           </div>
 
-          {filteredFoods.map((food) => (
+          {filteredFoods.map((food: NutritionFood) => (
             <div key={food.id} className="glass-card p-4 flex items-center justify-between">
               <div>
                 <span className="text-sm font-medium text-text-primary">{food.name}</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="badge bg-status-success/10 text-status-success text-[0.5rem]">HALAL</span>
-                  {food.lowCost && <span className="badge bg-accent-gold/10 text-accent-gold text-[0.5rem]">LOW COST</span>}
+                  {food.is_low_cost && <span className="badge bg-accent-gold/10 text-accent-gold text-[0.5rem]">LOW COST</span>}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-text-secondary">per 100g</div>
-                <div className="stat-number text-xs text-text-primary">{food.cal} cal · {food.protein}g P</div>
+                <div className="stat-number text-xs text-text-primary">{food.calories_per_100g} cal · {food.protein_per_100g}g P</div>
               </div>
             </div>
           ))}

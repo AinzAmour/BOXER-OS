@@ -1,5 +1,8 @@
 import { Activity, Lock, Plus, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db/dexie';
+import type { Assessment } from '../types';
 
 // ── Immutable Baseline Entry #0 ──
 const BASELINE = {
@@ -20,24 +23,6 @@ const BASELINE = {
   coach_notes: 'Day 0 baseline. No boxing experience. ~1 year gym. Previous badminton.',
 };
 
-interface RetestEntry {
-  entry_number: number;
-  date: string;
-  weight_kg: number;
-  body_fat_pct: number | null;
-  waist_inches: number;
-  pushups: number;
-  squats: number;
-  pullups: number;
-  plank_seconds: number;
-  jump_rope_seconds: number;
-  walking_minutes: number;
-  jogging_minutes: number;
-  running_status: string;
-  running_notes: string;
-  coach_notes: string;
-}
-
 function DiffBadge({ baseline, current }: { baseline: number; current: number }) {
   const diff = current - baseline;
   if (diff === 0) return <Minus size={12} className="text-text-muted" />;
@@ -46,7 +31,6 @@ function DiffBadge({ baseline, current }: { baseline: number; current: number })
 }
 
 export function AssessmentsPage() {
-  const [retests, setRetests] = useState<RetestEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     weight_kg: '',
@@ -64,10 +48,18 @@ export function AssessmentsPage() {
     coach_notes: '',
   });
 
-  const handleSubmit = () => {
-    const entry: RetestEntry = {
+  // Live Dexie query for all assessments
+  const allAssessments = useLiveQuery(async () => await db.assessments.toArray(), []) || [];
+  const retests = allAssessments.filter((a: Assessment) => a.entry_number > 0);
+
+  const handleSubmit = async () => {
+    const now = new Date().toISOString();
+    const entryId = `retest_${Date.now()}`;
+    const newEntry: Assessment = {
+      id: entryId,
+      user_id: 'local_user',
       entry_number: retests.length + 1,
-      date: new Date().toISOString().split('T')[0],
+      is_baseline: false,
       weight_kg: parseFloat(form.weight_kg) || BASELINE.weight_kg,
       body_fat_pct: form.body_fat_pct ? parseFloat(form.body_fat_pct) : null,
       waist_inches: parseFloat(form.waist_inches) || BASELINE.waist_inches,
@@ -78,11 +70,27 @@ export function AssessmentsPage() {
       jump_rope_seconds: parseInt(form.jump_rope_seconds) || 0,
       walking_minutes: parseFloat(form.walking_minutes) || 0,
       jogging_minutes: parseFloat(form.jogging_minutes) || 0,
-      running_status: form.running_status,
+      running_status: form.running_status as 'unable' | 'limited' | 'progressing' | 'normal',
       running_notes: form.running_notes,
       coach_notes: form.coach_notes,
+      created_at: now,
+      updated_at: now,
+      device_id: localStorage.getItem('boxer_os_device_id') || 'dev_local',
+      deleted_at: null,
+      sync_version: 1,
     };
-    setRetests([entry, ...retests]);
+
+    await db.assessments.put(newEntry);
+
+    // Queue change for cloud sync
+    await db.sync_queue.add({
+      table_name: 'assessments',
+      operation: 'INSERT',
+      record_id: entryId,
+      payload: newEntry as unknown as Record<string, unknown>,
+      created_at: now,
+    });
+
     setShowForm(false);
     setForm({
       weight_kg: '', body_fat_pct: '', waist_inches: '',
@@ -115,7 +123,7 @@ export function AssessmentsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity size={20} className="text-accent-cyan" />
-          <h2 className="text-lg font-bold">Assessments</h2>
+          <h2 className="text-lg font-bold">Assessments & Retests</h2>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn btn-primary text-sm">
           <Plus size={16} /> New Retest
@@ -216,11 +224,11 @@ export function AssessmentsPage() {
       )}
 
       {/* ── Retest History ── */}
-      {retests.map((retest) => (
-        <div key={retest.entry_number} className="glass-card p-5">
+      {retests.map((retest: Assessment) => (
+        <div key={retest.id} className="glass-card p-5">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-bold text-text-primary">Retest #{retest.entry_number}</span>
-            <span className="text-xs text-text-muted">{retest.date}</span>
+            <span className="text-xs text-text-muted">{retest.created_at.split('T')[0]}</span>
           </div>
 
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
@@ -248,7 +256,7 @@ export function AssessmentsPage() {
       {retests.length === 0 && !showForm && (
         <div className="text-center py-12 text-text-muted">
           <Activity size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No retests yet. Tap "New Retest" to log your first one.</p>
+          <p className="text-sm">No retests logged yet. Tap "New Retest" to log your first assessment.</p>
         </div>
       )}
     </div>
