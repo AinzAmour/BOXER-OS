@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import type { TabId } from './types';
 import { AppShell } from './components/layout/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
+import { SkillGraphPage } from './pages/SkillGraphPage';
+import { AdaptiveAssessmentPage } from './pages/AdaptiveAssessmentPage';
 import { AssessmentsPage } from './pages/AssessmentsPage';
 import { RunFixPage } from './pages/RunFixPage';
 import { BoxingPage } from './pages/BoxingPage';
 import { TimerPage } from './pages/TimerPage';
 import { NutritionPage } from './pages/NutritionPage';
 import { ProgressionPage } from './pages/ProgressionPage';
+import { AICoachPage } from './pages/AICoachPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuthPage } from './pages/AuthPage';
 import { seedInitialData } from './db/seed';
@@ -21,7 +24,7 @@ function App() {
   const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
-    // Seed initial Day 0 data into IndexedDB on app load
+    // Seed initial Day 0 data & LIFE//OS skill trees into IndexedDB on app load
     seedInitialData().catch(console.error);
 
     // Check remember me state
@@ -38,7 +41,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `boxer-os-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `life-os-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -74,9 +77,9 @@ function App() {
       <div className="min-h-dvh bg-[#0b0d10] text-[#f0f2f5] flex items-center justify-center p-4">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 rounded-xl bg-accent-red flex items-center justify-center mx-auto glow-red animate-pulse-glow">
-            <span className="text-white font-bold text-lg" style={{ fontFamily: 'var(--font-mono)' }}>B</span>
+            <span className="text-white font-bold text-lg" style={{ fontFamily: 'var(--font-mono)' }}>L</span>
           </div>
-          <p className="text-xs text-text-muted font-mono tracking-widest uppercase">INITIALIZING SYSTEM...</p>
+          <p className="text-xs text-text-muted font-mono tracking-widest uppercase">INITIALIZING LIFE//OS...</p>
         </div>
       </div>
     );
@@ -89,12 +92,21 @@ function App() {
   const renderPage = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardPage onNavigate={setActiveTab} />;
-      case 'assessments': return <AssessmentsPage />;
+      case 'skills': return <SkillGraphPage />;
+      case 'assessments': return (
+        <div className="space-y-8">
+          <AdaptiveAssessmentPage />
+          <div className="border-t border-border-subtle pt-6">
+            <AssessmentsPage />
+          </div>
+        </div>
+      );
       case 'runfix': return <RunFixPage />;
       case 'boxing': return <BoxingPage />;
       case 'timer': return <TimerPage />;
       case 'nutrition': return <NutritionPage />;
       case 'progression': return <ProgressionPage />;
+      case 'ai_coach': return <AICoachPage />;
       case 'settings': return <SettingsPage onLogout={handleLogout} userEmail={user?.email} />;
       default: return <DashboardPage onNavigate={setActiveTab} />;
     }

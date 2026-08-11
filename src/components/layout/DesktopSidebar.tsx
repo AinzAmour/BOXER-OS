@@ -1,11 +1,13 @@
 import {
   LayoutDashboard,
+  Network,
   Activity,
   Footprints,
   Swords,
   Timer,
   UtensilsCrossed,
   TrendingUp,
+  Bot,
   Settings,
 } from 'lucide-react';
 import type { TabId } from '../../types';
@@ -22,21 +24,17 @@ const navSections: {
   {
     title: 'CORE',
     items: [
-      { id: 'dashboard',   icon: LayoutDashboard,  label: 'Dashboard' },
+      { id: 'dashboard',   icon: LayoutDashboard,  label: 'Command Center' },
+      { id: 'skills',      icon: Network,          label: 'Skill Graph' },
+    ],
+  },
+  {
+    title: 'BODY',
+    items: [
       { id: 'assessments',  icon: Activity,         label: 'Assessments' },
-    ],
-  },
-  {
-    title: 'TRAINING',
-    items: [
       { id: 'runfix',      icon: Footprints,       label: 'Run-Fix' },
-      { id: 'boxing',      icon: Swords,           label: 'Boxing' },
+      { id: 'boxing',      icon: Swords,           label: 'Boxing Engine' },
       { id: 'timer',       icon: Timer,            label: 'Round Timer' },
-    ],
-  },
-  {
-    title: 'LIFESTYLE',
-    items: [
       { id: 'nutrition',   icon: UtensilsCrossed,  label: 'Nutrition' },
       { id: 'progression', icon: TrendingUp,       label: 'Phase Roadmap' },
     ],
@@ -44,6 +42,7 @@ const navSections: {
   {
     title: 'SYSTEM',
     items: [
+      { id: 'ai_coach',    icon: Bot,              label: 'AI Mentor' },
       { id: 'settings',    icon: Settings,         label: 'Settings' },
     ],
   },
@@ -87,7 +86,7 @@ export function DesktopSidebar({ activeTab, onTabChange }: DesktopSidebarProps) 
 
       {/* Version footer */}
       <div className="px-6 py-4 border-t border-border-subtle">
-        <p className="text-[0.625rem] text-text-muted font-mono tracking-wider">BOXER//OS v0.1.0</p>
+        <p className="text-[0.625rem] text-text-muted font-mono tracking-wider">LIFE//OS v1.0.0</p>
       </div>
     </aside>
   );

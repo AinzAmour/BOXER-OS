@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// BOXER//OS  —  TypeScript Type Definitions
+// LIFE//OS v1.0  —  TypeScript Type Definitions
 // ─────────────────────────────────────────────────────────────
 
 // ── Sync Metadata (every synced record) ──────────────────────
@@ -24,6 +24,8 @@ export interface Profile extends SyncMeta {
   diet_type: string;
   is_halal: boolean;
   soya_free: boolean;
+  level: number;
+  xp: number;
 }
 
 // ── Assessment (Baseline + Retests) ──────────────────────────
@@ -141,16 +143,68 @@ export interface PhaseProgress extends SyncMeta {
   completed_at: string | null;
 }
 
+// ── LIFE//OS Skill Graph Definitions ─────────────────────────
+export type DomainType = 'body' | 'mind' | 'tech';
+export type SkillState = 'unknown' | 'discovered' | 'training' | 'practicing' | 'proficient' | 'mastered' | 'advanced';
+export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface SkillNode extends SyncMeta {
+  domain: DomainType;
+  category: string;             // e.g. 'boxing', 'calisthenics', 'linux', 'networking'
+  name: string;
+  state: SkillState;
+  knowledge_pct: number;
+  practical_pct: number;
+  experience_pct: number;
+  confidence: ConfidenceLevel;
+  parent_skill_id: string | null; // Hierarchy Tree parent
+  notes: string;
+}
+
+export interface SkillPrerequisite {
+  id: string;
+  skill_id: string;              // Skill being unlocked
+  prerequisite_skill_id: string; // Required skill
+  required_practical_pct: number;
+  created_at: string;
+}
+
+export interface KnowledgeAssessment extends SyncMeta {
+  domain: DomainType;
+  category: string;
+  evaluated_skill_ids: string[];
+  score_pct: number;
+  summary: string;
+  gaps_identified: string[];
+}
+
+export interface Quest extends SyncMeta {
+  title: string;
+  domain: DomainType;
+  xp_reward: number;
+  is_completed: boolean;
+  completed_at: string | null;
+  target_skill_ids: string[];
+}
+
+export interface AISession extends SyncMeta {
+  session_type: 'assessment' | 'cyber_mentor' | 'boxing_coach' | 'fitness_coach' | 'weekly_review';
+  prompt_summary: string;
+  ai_response: string;
+  provider_used: 'groq' | 'gemini';
+}
+
 // ── App Navigation ───────────────────────────────────────────
 export type TabId =
   | 'dashboard'
-  | 'profile'
+  | 'skills'
   | 'assessments'
   | 'runfix'
   | 'boxing'
   | 'timer'
   | 'nutrition'
   | 'progression'
+  | 'ai_coach'
   | 'settings';
 
 // ── Sync State ───────────────────────────────────────────────
