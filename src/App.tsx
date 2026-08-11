@@ -9,16 +9,27 @@ import { TimerPage } from './pages/TimerPage';
 import { NutritionPage } from './pages/NutritionPage';
 import { ProgressionPage } from './pages/ProgressionPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { AuthPage } from './pages/AuthPage';
 import { seedInitialData } from './db/seed';
 import { useSync } from './hooks/useSync';
+import { useAuth } from './hooks/useAuth';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const { status, flushSync, exportJSON, importJSON } = useSync();
+  const { user, isAuthenticated, loading, logout } = useAuth();
+  const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
     // Seed initial Day 0 data into IndexedDB on app load
     seedInitialData().catch(console.error);
+
+    // Check remember me state
+    const isRemembered = localStorage.getItem('boxer_os_remember_me') === 'true';
+    const isGuestUnlocked = localStorage.getItem('boxer_os_guest_unlocked') === 'true';
+    if (isRemembered || isGuestUnlocked) {
+      setUnlocked(true);
+    }
   }, []);
 
   const handleExport = async () => {
@@ -51,6 +62,30 @@ function App() {
     input.click();
   };
 
+  const handleLogout = async () => {
+    localStorage.removeItem('boxer_os_remember_me');
+    localStorage.removeItem('boxer_os_guest_unlocked');
+    setUnlocked(false);
+    await logout();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-dvh bg-[#0b0d10] text-[#f0f2f5] flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 rounded-xl bg-accent-red flex items-center justify-center mx-auto glow-red animate-pulse-glow">
+            <span className="text-white font-bold text-lg" style={{ fontFamily: 'var(--font-mono)' }}>B</span>
+          </div>
+          <p className="text-xs text-text-muted font-mono tracking-widest uppercase">INITIALIZING SYSTEM...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && !unlocked) {
+    return <AuthPage onAuthenticated={() => setUnlocked(true)} />;
+  }
+
   const renderPage = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardPage onNavigate={setActiveTab} />;
@@ -60,7 +95,7 @@ function App() {
       case 'timer': return <TimerPage />;
       case 'nutrition': return <NutritionPage />;
       case 'progression': return <ProgressionPage />;
-      case 'settings': return <SettingsPage />;
+      case 'settings': return <SettingsPage onLogout={handleLogout} userEmail={user?.email} />;
       default: return <DashboardPage onNavigate={setActiveTab} />;
     }
   };

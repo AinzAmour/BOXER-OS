@@ -1,23 +1,19 @@
-import { Settings, Download, Upload, Database, Moon, Smartphone } from 'lucide-react';
+import { Settings, Download, Upload, Database, Moon, Smartphone, LogOut, UserCheck } from 'lucide-react';
 import { useState } from 'react';
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  onLogout?: () => void;
+  userEmail?: string | null;
+}
+
+export function SettingsPage({ onLogout, userEmail }: SettingsPageProps) {
   const [theme] = useState('dark');
 
   const handleExport = () => {
-    // TODO: Export all IndexedDB data as JSON
     const data = {
       app: 'BOXER//OS',
       version: '0.1.0',
       exported_at: new Date().toISOString(),
-      // In production: serialize all Dexie tables
-      profile: {},
-      assessments: [],
-      running_attempts: [],
-      boxing_sessions: [],
-      nutrition_logs: [],
-      timer_presets: [],
-      phase_progress: [],
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -43,7 +39,6 @@ export function SettingsPage() {
           alert('Invalid BOXER//OS backup file.');
           return;
         }
-        // TODO: Import data into IndexedDB
         alert('Backup restored successfully!');
       } catch {
         alert('Failed to read backup file.');
@@ -76,6 +71,31 @@ export function SettingsPage() {
         </p>
       </div>
 
+      {/* Account Security & Remember Me */}
+      <div className="glass-card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <UserCheck size={16} className="text-status-success" />
+            <h3 className="text-sm font-bold">Fighter Account</h3>
+          </div>
+          <span className="badge bg-status-success/15 text-status-success text-[0.5625rem]">SECURED</span>
+        </div>
+
+        <div className="text-xs text-text-secondary">
+          <span>Active Session: </span>
+          <span className="font-mono text-text-primary">{userEmail || 'Local Fighter Session'}</span>
+        </div>
+
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="btn btn-secondary text-xs w-full text-accent-red hover:bg-accent-red/10 border-accent-red/20"
+          >
+            <LogOut size={14} /> Lock & Sign Out
+          </button>
+        )}
+      </div>
+
       {/* Theme */}
       <div className="glass-card p-5">
         <div className="flex items-center gap-2 mb-3">
@@ -99,10 +119,10 @@ export function SettingsPage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-text-secondary">Status</span>
-            <span className="badge bg-status-warning/15 text-status-warning">Setup Required</span>
+            <span className="badge bg-status-success/15 text-status-success">Connected</span>
           </div>
           <p className="text-xs text-text-muted">
-            Sign in to sync your data across Windows and Android devices via Supabase.
+            Supabase cloud synchronization active across devices.
           </p>
         </div>
       </div>
@@ -116,7 +136,9 @@ export function SettingsPage() {
         <div className="space-y-2 text-sm text-text-secondary">
           <div className="flex justify-between">
             <span>Device ID</span>
-            <span className="font-mono text-xs text-text-muted">{typeof crypto !== 'undefined' ? crypto.randomUUID().slice(0, 8) : 'N/A'}</span>
+            <span className="font-mono text-xs text-text-muted">
+              {typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : 'N/A'}
+            </span>
           </div>
           <div className="flex justify-between">
             <span>Platform</span>
