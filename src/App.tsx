@@ -19,29 +19,39 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { seedReferenceData } from './db/seed';
 import { useSync } from './hooks/useSync';
 import { useAuth } from './hooks/useAuth';
-import { Bot, RotateCcw, ArrowRight } from 'lucide-react';
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const { status, flushSync, exportJSON, importJSON } = useSync();
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [unlocked, setUnlocked] = useState(false);
-  const [skipMigration, setSkipMigration] = useState(false);
 
   const userId = user?.id || 'local_user';
 
-  // Query profile from Dexie for current user
-  const profiles = useLiveQuery(
-    async () => db.profiles.toArray(),
-    []
+  // Live query for the active user's profile
+  const userProfile = useLiveQuery(
+    async () => db.profiles.where('user_id').equals(userId).first(),
+    [userId]
   );
 
-  const userProfile = profiles?.find((p) => p.user_id === userId || p.id === 'profile_default');
-  const isLegacyProfile = userProfile?.id === 'profile_default' && userProfile?.name === 'Mohammed Habibur Rahman';
-
   useEffect(() => {
-    // Seed universal reference data into IndexedDB on app load
-    seedReferenceData(userId).catch(console.error);
+    async function purgeAndSeed() {
+      try {
+        // Auto-purge any legacy v0.1/v1.0 profile_default records from IndexedDB
+        const legacyProfile = await db.profiles.get('profile_default');
+        if (legacyProfile) {
+          await db.profiles.delete('profile_default');
+          await db.assessments.where('id').equals('assessment_baseline_0').delete();
+        }
+
+        // Seed universal reference data into IndexedDB
+        await seedReferenceData(userId);
+      } catch (err) {
+        console.warn('Purge & seed warning:', err);
+      }
+    }
+
+    purgeAndSeed();
 
     // Check remember me state
     const isRemembered = localStorage.getItem('boxer_os_remember_me') === 'true';
@@ -88,18 +98,7 @@ function App() {
     await logout();
   };
 
-  const handleResetLegacyProfile = async () => {
-    try {
-      // Clear legacy profile so user can undergo fresh Ciel onboarding
-      await db.profiles.where('id').equals('profile_default').delete();
-      await db.assessments.where('entry_number').equals(0).delete();
-      setSkipMigration(true);
-    } catch (err) {
-      console.error('Error clearing legacy profile:', err);
-    }
-  };
-
-  if (loading || profiles === undefined) {
+  if (loading) {
     return (
       <div className="min-h-dvh bg-[#0b0d10] text-[#f0f2f5] flex items-center justify-center p-4">
         <div className="text-center space-y-3">
@@ -116,51 +115,13 @@ function App() {
     return <AuthPage onAuthenticated={() => setUnlocked(true)} />;
   }
 
-  // Check legacy profile choice
-  if (isLegacyProfile && !skipMigration) {
-    return (
-      <div className="min-h-dvh bg-bg-primary text-text-primary flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-bg-card border border-border-subtle rounded-2xl p-6 space-y-6 shadow-2xl">
-          <div className="w-12 h-12 rounded-xl bg-accent-gold/20 border border-accent-gold/40 flex items-center justify-center mx-auto text-accent-gold">
-            <Bot size={28} />
-          </div>
-
-          <div className="text-center space-y-2">
-            <h2 className="text-xl font-bold tracking-tight">Legacy Profile Detected</h2>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              We detected default baseline data from BOXER//OS v0.1. LIFE//OS v2.0 uses Ciel AI to build a personalized profile tailored strictly to you.
-            </p>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <button
-              onClick={() => setSkipMigration(true)}
-              className="w-full py-3 px-4 rounded-xl bg-accent-red hover:bg-accent-red/90 text-white font-medium text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <span>Keep & Continue with Existing Data</span>
-              <ArrowRight size={16} />
-            </button>
-
-            <button
-              onClick={handleResetLegacyProfile}
-              className="w-full py-3 px-4 rounded-xl bg-bg-secondary border border-border-subtle hover:border-border-active text-text-primary font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <RotateCcw size={14} className="text-accent-cyan" />
-              <span>Start Fresh with Ciel AI Onboarding</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Check if profile exists for this user. If not, trigger Ciel Onboarding Page!
-  if (!userProfile && !skipMigration) {
+  // If active user has no profile yet, render Ciel AI Onboarding Page!
+  if (!userProfile) {
     return (
       <OnboardingPage
         userId={userId}
         onComplete={() => {
-          setSkipMigration(true);
+          setActiveTab('dashboard');
         }}
       />
     );
