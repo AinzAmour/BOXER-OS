@@ -8,25 +8,49 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRemembered, setIsRemembered] = useState<boolean>(() => {
-    return localStorage.getItem('boxer_os_remember_me') === 'true';
+    try {
+      return localStorage.getItem('boxer_os_remember_me') === 'true';
+    } catch {
+      return false;
+    }
   });
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    });
+    let isMounted = true;
 
-    // Listen for auth state changes
+    async function initAuth() {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.warn('Supabase session warning, resetting auth state:', error);
+          // If session is invalid, clear stale auth items so app doesn't freeze
+          localStorage.removeItem('sb-dwlwcabszyvszlgeicek-auth-token');
+        } else if (isMounted && data?.session) {
+          setSession(data.session);
+          setUser(data.session.user ?? null);
+        }
+      } catch (err) {
+        console.error('Error recovering session:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    initAuth();
+
+    // Listen for auth state changes safely
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      setLoading(false);
+      if (isMounted) {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        setLoading(false);
+      }
     });
 
     return () => {
+      isMounted = false;
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -56,9 +80,21 @@ export function useAuth() {
   };
 
   const logout = async () => {
-    await signOut();
+    try {
+      await signOut();
+    } catch (e) {
+      console.warn('Sign out warning:', e);
+    }
     setUser(null);
     setSession(null);
+  };
+
+  const isGuestUnlocked = () => {
+    try {
+      return localStorage.getItem('boxer_os_guest_unlocked') === 'true';
+    } catch {
+      return false;
+    }
   };
 
   return {
@@ -70,6 +106,6 @@ export function useAuth() {
     register,
     loginWithGoogle,
     logout,
-    isAuthenticated: !!user || localStorage.getItem('boxer_os_guest_unlocked') === 'true',
+    isAuthenticated: !!user || isGuestUnlocked(),
   };
 }
