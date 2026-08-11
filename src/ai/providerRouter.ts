@@ -19,10 +19,12 @@ export interface ProviderCallParams {
 }
 
 function getEnvVar(key: string): string | undefined {
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[key];
-  }
-  return (import.meta as any).env?.[key];
+  try {
+    if (typeof process !== 'undefined' && process && process.env) {
+      return process.env[key];
+    }
+  } catch {}
+  return undefined;
 }
 
 export async function callProviderRouter(params: ProviderCallParams): Promise<ProviderResponse> {

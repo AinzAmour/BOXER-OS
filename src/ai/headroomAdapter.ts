@@ -18,10 +18,12 @@ export interface OptimizationResult {
 }
 
 function getEnvVar(key: string): string | undefined {
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[key];
-  }
-  return (import.meta as any).env?.[key];
+  try {
+    if (typeof process !== 'undefined' && process && process.env) {
+      return process.env[key];
+    }
+  } catch {}
+  return undefined;
 }
 
 /**

@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 // Server-Side Authoritative Ciel System Prompt Builder
+// Located in api/_lib to avoid Vercel route deployment
 // ─────────────────────────────────────────────────────────────
 
 export const CIEL_CORE_IDENTITY = `
