@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
-import { signInWithEmail, signUpWithEmail, signOut } from '../services/auth';
+import { signInWithEmail, signUpWithEmail, signInWithGoogle, signOut } from '../services/auth';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -49,6 +49,12 @@ export function useAuth() {
     return res;
   };
 
+  const loginWithGoogle = async () => {
+    localStorage.setItem('boxer_os_remember_me', 'true');
+    setIsRemembered(true);
+    await signInWithGoogle();
+  };
+
   const logout = async () => {
     await signOut();
     setUser(null);
@@ -62,6 +68,7 @@ export function useAuth() {
     isRemembered,
     login,
     register,
+    loginWithGoogle,
     logout,
     isAuthenticated: !!user || localStorage.getItem('boxer_os_guest_unlocked') === 'true',
   };
