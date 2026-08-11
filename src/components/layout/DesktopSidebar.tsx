@@ -42,7 +42,7 @@ const navSections: {
   {
     title: 'SYSTEM',
     items: [
-      { id: 'ai_coach',    icon: Bot,              label: 'AI Mentor' },
+      { id: 'ai_coach',    icon: Bot,              label: 'AI Assistant' },
       { id: 'settings',    icon: Settings,         label: 'Settings' },
     ],
   },

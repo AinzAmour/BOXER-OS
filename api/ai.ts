@@ -14,6 +14,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const groqApiKey = process.env.GROQ_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
 
+  const defaultSystemPrompt =
+    systemPrompt ||
+    'You are the LIFE//OS Private Executive Assistant & Scheduler. Provide structured, time-blocked daily plans, ask interactive check-in questions, and adapt training based on the user’s current local time.';
+
   // 1. Try Primary: Groq API
   if (groqApiKey) {
     try {
@@ -26,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
           messages: [
-            { role: 'system', content: systemPrompt || 'You are LIFE//OS AI, a tactical mentor for Body, Mind, and Tech mastery.' },
+            { role: 'system', content: defaultSystemPrompt },
             { role: 'user', content: prompt },
           ],
           temperature: 0.7,
@@ -57,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             contents: [
               {
                 parts: [
-                  { text: `${systemPrompt || 'You are LIFE//OS AI, a tactical mentor.'}\n\nUser Question:\n${prompt}` },
+                  { text: `${defaultSystemPrompt}\n\nUser Question:\n${prompt}` },
                 ],
               },
             ],
@@ -78,13 +82,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 3. Graceful Fallback Response if keys aren't configured yet
+  const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return res.status(200).json({
     reply:
-      `[LIFE//OS AI Offline Mode]\n` +
-      `System Analysis for Fighter (85kg, Day 0 Baseline):\n` +
-      `- Training Focus: Phase 1 Beginner Boxing Fundamentals & Run-Fix Diagnostic.\n` +
-      `- Tech Focus: Linux CLI & TCP/IP Networking Basics.\n` +
-      `- Recommendation: Complete today's shadowboxing rounds and Wireshark packet drill. Configure GROQ_API_KEY or GEMINI_API_KEY in Vercel settings to enable full cloud LLM coaching!`,
-    provider: 'local_fallback',
+      `[LIFE//OS Private Executive Assistant]\n` +
+      `Good evening! It is currently ${nowTime}.\n\n` +
+      `Since it's late in the day, let's adapt your schedule so you don't overfatigue:\n\n` +
+      `🕒 **Evening Schedule Plan (${nowTime} – Sleep)**:\n` +
+      `• 15 mins: Light Linux CLI & Wireshark Concept Review (MIND/TECH)\n` +
+      `• 10 mins: Mobility & Leg Stretch for Run-Fix Recovery (BODY)\n` +
+      `• 5 mins: Set tomorrow's morning training alarm\n\n` +
+      `❓ **Quick Assistant Check-in**:\n` +
+      `1. What time are you planning to sleep tonight?\n` +
+      `2. Would you like me to schedule your 3 shadowboxing rounds for 8:00 AM tomorrow morning?`,
+    provider: 'local_assistant',
   });
 }
