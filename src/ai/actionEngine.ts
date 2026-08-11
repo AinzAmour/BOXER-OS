@@ -16,6 +16,7 @@ import type {
   NutritionTarget,
   PhaseProgress,
   SkillState,
+  AIAction,
 } from '../types';
 
 export interface ActionResult {
@@ -47,7 +48,7 @@ const generateUUID = (): string => {
 
 /**
  * Resolve an AI skill proposal name to an existing skill ID or create a new one.
- * Ensures deduplication by matching trimmed, lowercased skill names for this user.
+ * Ensures deduplication (idempotency) by matching trimmed, lowercased skill names for this user.
  */
 export async function resolveOrCreateSkill(
   proposal: SkillProposal,
@@ -94,6 +95,52 @@ export async function resolveOrCreateSkill(
   await db.skills.put(newSkill);
   await syncManager.queueChange('skills', 'INSERT', newId, newSkill as unknown as Record<string, unknown>);
   return newId;
+}
+
+/**
+ * Resolve a quest proposal title to an existing incomplete quest ID or create a new one.
+ * Idempotency check prevents duplicate quest creation during LLM retries.
+ */
+export async function resolveOrCreateQuest(
+  proposal: QuestProposal,
+  targetSkillIds: string[],
+  userId: string
+): Promise<string> {
+  const deviceId = getDeviceId();
+  const now = new Date().toISOString();
+  const normalizedTitle = proposal.title.trim().toLowerCase();
+
+  const userQuests = await db.quests.where('user_id').equals(userId).toArray();
+  const existing = userQuests.find(
+    (q) => !q.is_completed && q.title.trim().toLowerCase() === normalizedTitle
+  );
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const questId = generateUUID();
+  const quest: Quest = {
+    id: questId,
+    user_id: userId,
+    title: proposal.title.trim(),
+    domain: proposal.domain,
+    xp_reward: Math.min(Math.max(proposal.xp_reward, 5), 200),
+    is_completed: false,
+    completed_at: null,
+    target_skill_ids: targetSkillIds,
+    estimated_minutes: proposal.estimated_minutes,
+    evidence_required: proposal.evidence_required,
+    created_at: now,
+    updated_at: now,
+    device_id: deviceId,
+    deleted_at: null,
+    sync_version: 1,
+  };
+
+  await db.quests.put(quest);
+  await syncManager.queueChange('quests', 'INSERT', questId, quest as unknown as Record<string, unknown>);
+  return questId;
 }
 
 /**
@@ -148,32 +195,43 @@ export async function recordSkillEvidence(
       newState = 'practicing';
       promoted = true;
     }
+  } else if (evidence.source === 'onboarding' || evidence.confidence === 'self_reported') {
+    // Self reported evidence capped at 'discovered'
+    if (skill.state === 'unknown') {
+      newState = 'discovered';
+      promoted = true;
+    }
   }
 
   const updatedSkill: SkillNode = {
     ...skill,
     state: newState,
     evidence: updatedEvidenceList,
+    knowledge_pct: Math.min(skill.knowledge_pct + 10, 100),
+    practical_pct: promoted ? Math.min(skill.practical_pct + 15, 100) : skill.practical_pct,
     updated_at: now,
   };
 
   await db.skills.put(updatedSkill);
   await syncManager.queueChange('skills', 'UPDATE', skill.id, updatedSkill as unknown as Record<string, unknown>);
-
   return { skill_id: skill.id, promoted };
 }
 
 /**
- * Execute a validated CielAction proposal.
+ * Main Action Engine entry point.
+ * Enforces permissions, idempotency, evidence limits, and writes Dexie.
  */
 export async function executeCielAction(
   action: CielAction,
   userId: string,
-  _sessionId?: string
+  sessionId: string = 'session_default'
 ): Promise<ActionResult> {
   const createdIds: string[] = [];
   const deviceId = getDeviceId();
   const now = new Date().toISOString();
+
+  let executionStatus: 'passed' | 'failed' | 'partial' | 'rejected' = 'passed';
+  let validationErrors: string[] | undefined = undefined;
 
   try {
     switch (action.action) {
@@ -230,7 +288,7 @@ export async function executeCielAction(
         await syncManager.queueChange('profiles', 'INSERT', profileId, profile as unknown as Record<string, unknown>);
         createdIds.push(profileId);
 
-        // Create baseline assessment Entry #0
+        // Baseline assessment Entry #0
         const baselineId = generateUUID();
         const baseline: Assessment = {
           id: baselineId,
@@ -260,7 +318,7 @@ export async function executeCielAction(
         await syncManager.queueChange('assessments', 'INSERT', baselineId, baseline as unknown as Record<string, unknown>);
         createdIds.push(baselineId);
 
-        // Resolve and create initial skills (with fallbacks if null)
+        // Initial skills with idempotency check
         const skillsToCreate: SkillProposal[] = (action.skills && action.skills.length > 0)
           ? action.skills
           : [
@@ -275,7 +333,7 @@ export async function executeCielAction(
           createdIds.push(skillId);
         }
 
-        // Create initial quests (with fallbacks if null)
+        // Initial quests with idempotency check
         const questsToCreate: QuestProposal[] = (action.quests && action.quests.length > 0)
           ? action.quests
           : [
@@ -292,31 +350,11 @@ export async function executeCielAction(
             );
             targetSkillIds.push(skillId);
           }
-
-          const questId = generateUUID();
-          const quest: Quest = {
-            id: questId,
-            user_id: userId,
-            title: q.title,
-            domain: q.domain,
-            xp_reward: q.xp_reward,
-            is_completed: false,
-            completed_at: null,
-            target_skill_ids: targetSkillIds,
-            estimated_minutes: q.estimated_minutes,
-            evidence_required: q.evidence_required,
-            created_at: now,
-            updated_at: now,
-            device_id: deviceId,
-            deleted_at: null,
-            sync_version: 1,
-          };
-          await db.quests.put(quest);
-          await syncManager.queueChange('quests', 'INSERT', questId, quest as unknown as Record<string, unknown>);
+          const questId = await resolveOrCreateQuest(q, targetSkillIds, userId);
           createdIds.push(questId);
         }
 
-        // Create default Nutrition Target
+        // Nutrition Target
         const targetId = generateUUID();
         const target: NutritionTarget = {
           id: targetId,
@@ -334,7 +372,7 @@ export async function executeCielAction(
         await syncManager.queueChange('nutrition_targets', 'INSERT', targetId, target as unknown as Record<string, unknown>);
         createdIds.push(targetId);
 
-        // Create initial PhaseProgress
+        // PhaseProgress #1
         const phase1Id = generateUUID();
         const phase1: PhaseProgress = {
           id: phase1Id,
@@ -408,27 +446,7 @@ export async function executeCielAction(
             );
             targetSkillIds.push(skillId);
           }
-
-          const questId = generateUUID();
-          const quest: Quest = {
-            id: questId,
-            user_id: userId,
-            title: q.title,
-            domain: q.domain,
-            xp_reward: Math.min(Math.max(q.xp_reward, 5), 200),
-            is_completed: false,
-            completed_at: null,
-            target_skill_ids: targetSkillIds,
-            estimated_minutes: q.estimated_minutes,
-            evidence_required: q.evidence_required,
-            created_at: now,
-            updated_at: now,
-            device_id: deviceId,
-            deleted_at: null,
-            sync_version: 1,
-          };
-          await db.quests.put(quest);
-          await syncManager.queueChange('quests', 'INSERT', questId, quest as unknown as Record<string, unknown>);
+          const questId = await resolveOrCreateQuest(q, targetSkillIds, userId);
           createdIds.push(questId);
         }
         break;
@@ -444,7 +462,6 @@ export async function executeCielAction(
       }
 
       case 'reschedule': {
-        // Delete today's incomplete quests for this user
         const userQuests = await db.quests.where('user_id').equals(userId).toArray();
         const incomplete = userQuests.filter((q) => !q.is_completed);
 
@@ -453,7 +470,6 @@ export async function executeCielAction(
           await syncManager.queueChange('quests', 'DELETE', q.id, {});
         }
 
-        // Add new proposed quests
         if (action.quests && action.quests.length > 0) {
           for (const q of action.quests) {
             const targetSkillIds: string[] = [];
@@ -464,27 +480,7 @@ export async function executeCielAction(
               );
               targetSkillIds.push(skillId);
             }
-
-            const questId = generateUUID();
-            const quest: Quest = {
-              id: questId,
-              user_id: userId,
-              title: q.title,
-              domain: q.domain,
-              xp_reward: Math.min(Math.max(q.xp_reward, 5), 200),
-              is_completed: false,
-              completed_at: null,
-              target_skill_ids: targetSkillIds,
-              estimated_minutes: q.estimated_minutes,
-              evidence_required: q.evidence_required,
-              created_at: now,
-              updated_at: now,
-              device_id: deviceId,
-              deleted_at: null,
-              sync_version: 1,
-            };
-            await db.quests.put(quest);
-            await syncManager.queueChange('quests', 'INSERT', questId, quest as unknown as Record<string, unknown>);
+            const questId = await resolveOrCreateQuest(q, targetSkillIds, userId);
             createdIds.push(questId);
           }
         }
@@ -496,19 +492,66 @@ export async function executeCielAction(
         break;
     }
 
+    // Record AI Action Audit Log in Dexie
+    const auditId = generateUUID();
+    const auditRecord: AIAction = {
+      id: auditId,
+      user_id: userId,
+      session_id: sessionId,
+      action_type: action.action,
+      proposed_data: JSON.stringify(action),
+      validation_result: executionStatus,
+      validation_errors: validationErrors,
+      records_created: createdIds,
+      created_at: now,
+      updated_at: now,
+      device_id: deviceId,
+      deleted_at: null,
+      sync_version: 1,
+    };
+    await db.ai_actions.put(auditRecord);
+
     return {
       success: true,
       action_type: action.action,
       created_ids: createdIds,
-      message: `Action '${action.action}' executed successfully. ${createdIds.length} records updated/created.`,
+      message: `Action '${action.action}' executed successfully with idempotency protection.`,
     };
   } catch (err) {
+    executionStatus = 'failed';
+    const errMsg = err instanceof Error ? err.message : 'Unknown execution error';
+    validationErrors = [errMsg];
+
     console.error(`[ActionEngine] Error executing action '${action.action}':`, err);
+
+    // Audit failed execution
+    try {
+      const auditId = generateUUID();
+      const auditRecord: AIAction = {
+        id: auditId,
+        user_id: userId,
+        session_id: sessionId,
+        action_type: action.action,
+        proposed_data: JSON.stringify(action),
+        validation_result: 'rejected',
+        validation_errors: validationErrors,
+        records_created: [],
+        created_at: now,
+        updated_at: now,
+        device_id: deviceId,
+        deleted_at: null,
+        sync_version: 1,
+      };
+      await db.ai_actions.put(auditRecord);
+    } catch (auditErr) {
+      console.warn('[ActionEngine] Failed to write audit record:', auditErr);
+    }
+
     return {
       success: false,
       action_type: action.action,
       created_ids: [],
-      message: err instanceof Error ? err.message : 'Unknown execution error',
+      message: errMsg,
     };
   }
 }

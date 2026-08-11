@@ -1,13 +1,16 @@
 import { z } from 'zod';
+import { CielQuestionSchema } from './cielQuestionSchemas';
 
+// ── User Constraints Schema ───────────────────────────────────
 export const UserConstraintsSchema = z.object({
   equipment: z.array(z.string()).nullish(),
-  daily_minutes: z.number().nullish(),
+  daily_minutes: z.coerce.number().nullish(),
   budget: z.string().nullish(),
   location: z.string().nullish(),
   cannot_do: z.array(z.string()).nullish(),
 });
 
+// ── Profile Proposal Schema ───────────────────────────────────
 export const ProfileProposalSchema = z.object({
   name: z.string().min(1).max(100),
   age: z.coerce.number().min(1).max(120),
@@ -20,6 +23,7 @@ export const ProfileProposalSchema = z.object({
   constraints: UserConstraintsSchema.nullish(),
 });
 
+// ── Skill Proposal Schema ────────────────────────────────────
 export const SkillProposalSchema = z.object({
   domain: z.enum(['body', 'mind', 'tech']),
   category: z.string().min(1).max(50),
@@ -27,6 +31,7 @@ export const SkillProposalSchema = z.object({
   state: z.enum(['unknown', 'discovered']).nullish().transform((v) => v || 'discovered'),
 });
 
+// ── Quest Proposal Schema ────────────────────────────────────
 export const QuestProposalSchema = z.object({
   title: z.string().min(2).max(200),
   domain: z.enum(['body', 'mind', 'tech']),
@@ -36,6 +41,7 @@ export const QuestProposalSchema = z.object({
   evidence_required: z.string().nullish(),
 });
 
+// ── Evidence Proposal Schema ─────────────────────────────────
 export const EvidenceProposalSchema = z.object({
   skill_name: z.string().min(1).max(100),
   source: z.enum(['onboarding', 'assessment', 'session_log', 'self_report']),
@@ -44,7 +50,8 @@ export const EvidenceProposalSchema = z.object({
   confidence: z.enum(['self_reported', 'observed', 'assessed']),
 });
 
-export const CielActionSchema = z.object({
+// ── Ciel Actions Schema ──────────────────────────────────────
+export const CielActionPayloadSchema = z.object({
   action: z.enum([
     'onboarding_complete',
     'update_profile',
@@ -61,7 +68,34 @@ export const CielActionSchema = z.object({
   evidence: EvidenceProposalSchema.nullish(),
 });
 
-export type CielAction = z.infer<typeof CielActionSchema>;
+// ── Ciel Envelope Schemas (Strict Protocol v2.0) ──────────────
+export const CielMessageEnvelopeSchema = z.object({
+  protocol_version: z.literal('2.0').default('2.0'),
+  type: z.literal('message'),
+  text: z.string().min(1),
+});
+
+export const CielQuestionEnvelopeSchema = z.object({
+  protocol_version: z.literal('2.0').default('2.0'),
+  type: z.literal('question'),
+  text: z.string().min(1),
+  question: CielQuestionSchema,
+});
+
+export const CielActionEnvelopeSchema = z.object({
+  protocol_version: z.literal('2.0').default('2.0'),
+  type: z.literal('action'),
+  text: z.string().min(1),
+  action: CielActionPayloadSchema,
+});
+
+export const CielEnvelopeSchema = z.discriminatedUnion('type', [
+  CielMessageEnvelopeSchema,
+  CielQuestionEnvelopeSchema,
+  CielActionEnvelopeSchema,
+]);
+
+export type CielAction = z.infer<typeof CielActionPayloadSchema>;
 export type ProfileProposal = z.infer<typeof ProfileProposalSchema>;
 export type SkillProposal = z.infer<typeof SkillProposalSchema>;
 export type QuestProposal = z.infer<typeof QuestProposalSchema>;

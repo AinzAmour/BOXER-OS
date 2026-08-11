@@ -1,7 +1,7 @@
 import { buildUserContext } from '../ai/contextBuilder';
-import { parseCielResponse } from '../ai/cielResponseParser';
+import { parseCielResponseEnvelope } from '../ai/cielResponseParser';
 import { executeCielAction, type ActionResult } from '../ai/actionEngine';
-import type { CielMode } from '../types';
+import type { CielMode, CielEnvelope } from '../types';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -12,6 +12,7 @@ export interface CielResponse {
   text: string;
   provider: string;
   actionResult: ActionResult | null;
+  envelope: CielEnvelope | null;
 }
 
 function handleLocalOnboarding(messages: ChatMessage[]): string {
@@ -25,33 +26,71 @@ function handleLocalOnboarding(messages: ChatMessage[]): string {
   }
 
   if (count <= 1) {
-    return `Welcome to LIFE//OS. I am Ciel, the intelligence layer behind your personal system.\n\nLet's build your profile. What should I call you?`;
+    return JSON.stringify({
+      protocol_version: '2.0',
+      type: 'question',
+      text: `Welcome to LIFE//OS. I am Ciel, the intelligence layer behind your personal system. What should I call you?`,
+      question: {
+        type: 'text',
+        field: 'name',
+        question: 'What is your name?',
+      },
+    });
   } else if (count === 2) {
-    return `Hello ${nameCandidate}. What is your age, height (in cm), and current weight (in kg)?`;
+    return JSON.stringify({
+      protocol_version: '2.0',
+      type: 'question',
+      text: `Hello ${nameCandidate}. What is your age, height, and weight?`,
+      question: {
+        type: 'number',
+        field: 'age',
+        question: 'Enter your age',
+        min: 10,
+        max: 120,
+      },
+    });
   } else if (count === 3) {
-    return `Understood. What are your primary goals for personal growth and training (e.g. Boxing, Calisthenics, Cybersecurity, Focus)?`;
-  } else if (count === 4) {
-    return `What is your fitness background and current physical activity level?`;
-  } else if (count === 5) {
-    return `What are your diet type and dietary preferences (e.g. Halal, Soya-Free, Vegetarian, Standard)?`;
-  } else if (count === 6) {
-    return `How many minutes per day can you dedicate to your training and learning schedule?`;
-  } else if (count === 7) {
-    return (
-      `Here is what I understand about your profile:\n\n` +
-      `• Name: ${nameCandidate}\n` +
-      `• Stats: Recorded\n` +
-      `• Primary Goals: Fitness, Skill Graph & Mastery\n` +
-      `• Diet: Halal & Soya-Free Preferences\n` +
-      `• Daily Availability: 60-90 mins/day\n` +
-      `• Enabled Modules: BODY (Fitness/Boxing) ✓, TECH (Cyber) ✓, MIND ✓\n\n` +
-      `Does this summary look right to you?`
-    );
+    return JSON.stringify({
+      protocol_version: '2.0',
+      type: 'question',
+      text: `Understood. What are your primary goals for personal growth and training?`,
+      question: {
+        type: 'multi_select',
+        field: 'goals',
+        question: 'Select your primary goals',
+        options: ['Kickboxing', 'Cybersecurity', 'Mentalism', 'Calisthenics', 'Nutrition'],
+        allow_custom: true,
+      },
+    });
   } else {
-    return (
-      `Profile confirmed. Initializing your personal skill graph, baseline assessment, daily missions, and phase roadmap.\n\n` +
-      `\`\`\`json\n{\n  "action": "onboarding_complete",\n  "onboarding_complete": true,\n  "profile": {\n    "name": "${nameCandidate}",\n    "age": 21,\n    "height_cm": 178,\n    "weight_kg": 80,\n    "diet_type": "halal",\n    "is_halal": true,\n    "soya_free": true,\n    "enabled_modules": ["fitness", "boxing", "cyber", "nutrition", "timer"],\n    "constraints": {\n      "daily_minutes": 90\n    }\n  },\n  "skills": [\n    { "domain": "body", "category": "boxing", "name": "Orthodox Stance & Guard", "state": "discovered" },\n    { "domain": "body", "category": "calisthenics", "name": "Strict Push-ups", "state": "discovered" },\n    { "domain": "tech", "category": "linux", "name": "Linux CLI Navigation", "state": "discovered" }\n  ],\n  "quests": [\n    { "title": "Complete 3 Shadowboxing Rounds (3 min each)", "domain": "body", "xp_reward": 75, "target_skill_names": ["Orthodox Stance & Guard"], "estimated_minutes": 15 },\n    { "title": "Linux Terminal Commands Practice", "domain": "tech", "xp_reward": 50, "target_skill_names": ["Linux CLI Navigation"], "estimated_minutes": 20 }\n  ]\n}\n\`\`\``
-    );
+    return JSON.stringify({
+      protocol_version: '2.0',
+      type: 'action',
+      text: `Profile confirmed for ${nameCandidate}. Initializing your personal skill graph, baseline assessment, daily missions, and phase roadmap.`,
+      action: {
+        action: 'onboarding_complete',
+        onboarding_complete: true,
+        profile: {
+          name: nameCandidate,
+          age: 21,
+          height_cm: 178,
+          weight_kg: 80,
+          diet_type: 'halal',
+          is_halal: true,
+          soya_free: true,
+          enabled_modules: ['body', 'mind', 'tech'],
+        },
+        skills: [
+          { domain: 'body', category: 'boxing', name: 'Orthodox Stance & Guard', state: 'discovered' },
+          { domain: 'body', category: 'calisthenics', name: 'Strict Push-ups', state: 'discovered' },
+          { domain: 'tech', category: 'linux', name: 'Linux CLI Navigation', state: 'discovered' },
+        ],
+        quests: [
+          { title: 'Complete 3 Shadowboxing Rounds (3 min each)', domain: 'body', xp_reward: 75, target_skill_names: ['Orthodox Stance & Guard'], estimated_minutes: 15 },
+          { title: 'Linux Terminal Commands Practice', domain: 'tech', xp_reward: 50, target_skill_names: ['Linux CLI Navigation'], estimated_minutes: 20 },
+        ],
+      },
+    });
   }
 }
 
@@ -94,16 +133,16 @@ export async function askCiel(
     if (mode === 'onboarding') {
       rawReply = handleLocalOnboarding(messages);
     } else {
-      rawReply =
-        `[Ciel Intelligence Layer — Standby Mode]\n` +
-        `System active. State synchronized with local IndexedDB.\n\n` +
-        `Focus Mode: ${String(mode).toUpperCase()}\n` +
-        `Ready to assist with your personal training, assessments, and schedule.`;
+      rawReply = JSON.stringify({
+        protocol_version: '2.0',
+        type: 'message',
+        text: `[Ciel Intelligence Layer — Standby Mode]\nSystem active. State synchronized with local IndexedDB.\nFocus Mode: ${String(mode).toUpperCase()}`,
+      });
     }
   }
 
-  // Parse response for fenced JSON action block & validate via Zod
-  const parsed = parseCielResponse(rawReply);
+  // Parse response envelope & validate via Zod
+  const parsed = parseCielResponseEnvelope(rawReply);
 
   // If validated action is present, execute via Action Engine
   let actionResult: ActionResult | null = null;
@@ -115,11 +154,12 @@ export async function askCiel(
     text: parsed.text,
     provider,
     actionResult,
+    envelope: parsed.envelope,
   };
 }
 
 /**
- * Legacy compatibility wrapper for existing AICoachPage components.
+ * Compatibility wrapper for AICoachPage components.
  */
 export async function askAICoach(
   prompt: string,

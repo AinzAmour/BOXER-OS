@@ -169,22 +169,22 @@ export interface SkillEvidence {
 
 export interface SkillNode extends SyncMeta {
   domain: DomainType;
-  category: string;             // e.g. 'boxing', 'calisthenics', 'linux', 'networking'
+  category: string;
   name: string;
   state: SkillState;
   knowledge_pct: number;
   practical_pct: number;
   experience_pct: number;
   confidence: ConfidenceLevel;
-  parent_skill_id: string | null; // Hierarchy Tree parent
+  parent_skill_id: string | null;
   notes: string;
   evidence?: SkillEvidence[];
 }
 
 export interface SkillPrerequisite {
   id: string;
-  skill_id: string;              // Skill being unlocked
-  prerequisite_skill_id: string; // Required skill
+  skill_id: string;
+  prerequisite_skill_id: string;
   required_practical_pct: number;
   created_at: string;
 }
@@ -209,6 +209,62 @@ export interface Quest extends SyncMeta {
   evidence_required?: string | null;
 }
 
+// ── Dynamic Ciel Questions ───────────────────────────────────
+export type QuestionType = 'text' | 'single_select' | 'multi_select' | 'number' | 'scale';
+
+export interface CielQuestion {
+  type: QuestionType;
+  field: string;
+  question: string;
+  options?: string[];
+  allow_custom?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+// ── Ciel Response Envelope ───────────────────────────────────
+export type EnvelopeType = 'message' | 'question' | 'action';
+
+export interface CielMessageEnvelope {
+  protocol_version: '2.0';
+  type: 'message';
+  text: string;
+}
+
+export interface CielQuestionEnvelope {
+  protocol_version: '2.0';
+  type: 'question';
+  text: string;
+  question: CielQuestion;
+}
+
+export interface CielActionEnvelope {
+  protocol_version: '2.0';
+  type: 'action';
+  text: string;
+  action: {
+    action: CielActionType;
+    onboarding_complete?: boolean | null;
+    profile?: any;
+    skills?: any;
+    quests?: any;
+    evidence?: any;
+  };
+}
+
+export type CielEnvelope = CielMessageEnvelope | CielQuestionEnvelope | CielActionEnvelope;
+
+// ── AI Request UX State ──────────────────────────────────────
+export type AIRequestState =
+  | 'idle'
+  | 'thinking'
+  | 'generating'
+  | 'repairing'
+  | 'fallback'
+  | 'completed'
+  | 'error';
+
 // ── Ciel Intelligence Layer & Audit ──────────────────────────
 export type CielMode =
   | 'onboarding'
@@ -232,7 +288,8 @@ export interface AIAction extends SyncMeta {
   session_id: string;
   action_type: CielActionType;
   proposed_data: string;        // JSON stringified
-  validation_result: 'passed' | 'failed' | 'partial';
+  validation_result: 'passed' | 'failed' | 'partial' | 'rejected';
+  validation_errors?: string[];
   records_created: string[];    // IDs of created records
 }
 
@@ -240,7 +297,7 @@ export interface AISession extends SyncMeta {
   session_type: CielMode;
   prompt_summary: string;
   ai_response: string;
-  provider_used: 'groq' | 'gemini';
+  provider_used: 'groq' | 'gemini' | 'local_ciel';
 }
 
 // ── App Navigation ───────────────────────────────────────────
@@ -258,4 +315,3 @@ export type TabId =
 
 // ── Sync State ───────────────────────────────────────────────
 export type SyncStatus = 'online' | 'syncing' | 'offline' | 'synced';
-

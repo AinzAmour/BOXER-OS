@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { Bot, Send, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bot, Send, CheckCircle2, ChevronRight, User } from 'lucide-react';
 import { askCiel, type ChatMessage } from '../services/aiService';
+import { parseCielResponseEnvelope } from '../ai/cielResponseParser';
+import { validateQuestionAnswer } from '../ai/cielQuestionSchemas';
+import { getNextOnboardingStep, type OnboardingState } from '../ai/onboardingEngine';
+import type { CielQuestion } from '../types';
 
 interface OnboardingPageProps {
   userId: string;
@@ -11,93 +15,135 @@ export function OnboardingPage({ userId, onComplete }: OnboardingPageProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeQuestion, setActiveQuestion] = useState<CielQuestion | null>(null);
+  const [multiSelectValues, setMultiSelectValues] = useState<string[]>([]);
+  const [scaleValue, setScaleValue] = useState<number>(60);
+  const [onboardingState, setOnboardingState] = useState<OnboardingState>({});
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
-
-  // Send initial Ciel greeting on mount
   useEffect(() => {
     let isMounted = true;
 
-    async function startOnboarding() {
+    async function initInterview() {
       setLoading(true);
-      const initialPrompt: ChatMessage[] = [
-        {
-          role: 'user',
-          content: 'Hello, I am ready to set up my LIFE//OS profile.',
-        },
-      ];
+      const initialStep = getNextOnboardingStep({}, 1);
 
-      const res = await askCiel('onboarding', initialPrompt, userId);
-      if (isMounted) {
-        setMessages([
-          {
-            role: 'assistant',
-            content: res.text || "Welcome to LIFE//OS. I'm Ciel — the intelligence layer behind your system. What should I call you?",
-          },
-        ]);
-        setLoading(false);
+      if (initialStep.type === 'question') {
+        const welcomeText = initialStep.text;
+        if (isMounted) {
+          setMessages([{ role: 'assistant', content: welcomeText }]);
+          setActiveQuestion(initialStep.question);
+        }
+      } else {
+        const res = await askCiel('onboarding', [{ role: 'user', content: 'Initialize onboarding' }], userId);
+        if (isMounted) {
+          setMessages([{ role: 'assistant', content: res.text }]);
+        }
       }
+      setLoading(false);
     }
 
-    startOnboarding().catch(console.error);
+    initInterview().catch(console.error);
 
     return () => {
       isMounted = false;
     };
   }, [userId]);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  const handleUserAnswer = async (answerValue: string | number | string[]) => {
+    if (loading) return;
 
-    const userText = input.trim();
-    setInput('');
+    // Validate answer if active question exists
+    if (activeQuestion) {
+      const valRes = validateQuestionAnswer(activeQuestion, answerValue);
+      if (!valRes.valid) {
+        setStatusMessage(`⚠️ ${valRes.error || 'Invalid answer'}`);
+        return;
+      }
+    }
+
     setStatusMessage(null);
+    const displayText = Array.isArray(answerValue) ? answerValue.join(', ') : String(answerValue);
 
+    // Optimistic UI Update: Render user choice immediately in chat stream
     const updatedMessages: ChatMessage[] = [
       ...messages,
-      { role: 'user', content: userText },
+      { role: 'user', content: displayText },
     ];
-
     setMessages(updatedMessages);
+    setInput('');
+    setMultiSelectValues([]);
+    setActiveQuestion(null);
     setLoading(true);
 
+    // Update internal state
+    const nextState: OnboardingState = { ...onboardingState };
+    if (activeQuestion?.field === 'name') nextState.name = String(answerValue);
+    if (activeQuestion?.field === 'age') nextState.age = Number(answerValue);
+    if (activeQuestion?.field === 'goals') nextState.goals = Array.isArray(answerValue) ? answerValue : [String(answerValue)];
+    if (activeQuestion?.field === 'cyberExperience') nextState.cyberExperience = String(answerValue);
+    if (activeQuestion?.field === 'cyberCategories') nextState.cyberCategories = Array.isArray(answerValue) ? answerValue : [String(answerValue)];
+    if (activeQuestion?.field === 'dietType') nextState.dietType = String(answerValue);
+    if (activeQuestion?.field === 'dailyMinutes') nextState.dailyMinutes = Number(answerValue);
+    setOnboardingState(nextState);
+
     try {
+      // Call Ciel Service (calls Gateway /api/ai)
       const res = await askCiel('onboarding', updatedMessages, userId);
+      const parsed = parseCielResponseEnvelope(res.text);
 
-      setMessages([
-        ...updatedMessages,
-        { role: 'assistant', content: res.text },
-      ]);
-
-      if (res.actionResult) {
-        if (res.actionResult.success && res.actionResult.action_type === 'onboarding_complete') {
-          setStatusMessage('✓ Profile created successfully! Initializing LIFE//OS...');
+      if (parsed.envelope?.type === 'question') {
+        const qEnv = parsed.envelope;
+        setMessages([...updatedMessages, { role: 'assistant', content: qEnv.text }]);
+        setActiveQuestion(qEnv.question);
+        if (qEnv.question.type === 'scale') {
+          setScaleValue(qEnv.question.min ?? 60);
+        }
+      } else if (parsed.envelope?.type === 'action' || res.actionResult) {
+        setMessages([...updatedMessages, { role: 'assistant', content: res.text }]);
+        if (res.actionResult?.success) {
+          setStatusMessage('✓ Profile initialized successfully! Redirecting to Command Center...');
           setTimeout(() => {
             onComplete();
-          }, 1500);
-        } else if (res.actionResult.success) {
-          setStatusMessage(`✓ Applied: ${res.actionResult.action_type}`);
+          }, 1200);
+        }
+      } else {
+        // Fallback local onboarding step if server returns fallback text
+        const localNext = getNextOnboardingStep(nextState, updatedMessages.filter((m) => m.role === 'user').length + 1);
+        if (localNext.type === 'question') {
+          setMessages([...updatedMessages, { role: 'assistant', content: localNext.text }]);
+          setActiveQuestion(localNext.question);
+        } else {
+          setMessages([...updatedMessages, { role: 'assistant', content: localNext.text }]);
+          // Execute complete action via local Ciel engine
+          const execRes = await askCiel('onboarding', [...updatedMessages, { role: 'user', content: 'confirm' }], userId);
+          if (execRes.actionResult?.success) {
+            setStatusMessage('✓ Profile initialized successfully! Redirecting...');
+            setTimeout(() => {
+              onComplete();
+            }, 1200);
+          }
         }
       }
     } catch (err) {
-      console.error('Onboarding message error:', err);
+      console.error('Onboarding stream error:', err);
       setStatusMessage('Connection warning. Retrying response...');
     } finally {
       setLoading(false);
     }
   };
 
+  const toggleMultiSelectOption = (opt: string) => {
+    if (multiSelectValues.includes(opt)) {
+      setMultiSelectValues(multiSelectValues.filter((o) => o !== opt));
+    } else {
+      setMultiSelectValues([...multiSelectValues, opt]);
+    }
+  };
+
   return (
     <div className="min-h-dvh bg-bg-primary text-text-primary flex flex-col justify-between">
-      {/* Onboarding Header */}
+      {/* Header */}
       <header className="sticky top-0 z-40 flex items-center justify-between px-4 lg:px-8 py-4 border-b border-border-subtle bg-bg-primary/95 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-accent-red flex items-center justify-center glow-red">
@@ -108,99 +154,166 @@ export function OnboardingPage({ userId, onComplete }: OnboardingPageProps) {
               CIEL <span className="text-accent-red">//</span> ONBOARDING
             </h1>
             <p className="text-[0.6875rem] font-mono text-text-muted mt-0.5">
-              Personal Operating System Initialization
+              Personal Operating System Initialization • Envelope v2.0
             </p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="badge bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20 text-[0.625rem] py-0.5 px-2">
-            <Sparkles size={10} className="mr-1 inline" /> AI INTERVIEW MODE
-          </span>
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent-red/10 border border-accent-red/20 text-accent-red text-xs font-mono">
+          <span className="w-2 h-2 rounded-full bg-accent-red animate-ping" />
+          <span>AI INTERVIEW MODE</span>
         </div>
       </header>
 
-      {/* Main Conversation Stream */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-6 flex flex-col justify-between space-y-6">
-        <div className="space-y-4">
-          {messages.map((msg, i) => (
+      {/* Main Conversation Log */}
+      <main className="flex-1 max-w-3xl w-full mx-auto p-4 lg:p-6 space-y-4 overflow-y-auto">
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            {msg.role === 'assistant' && (
+              <div className="w-8 h-8 rounded-lg bg-accent-red/20 border border-accent-red/30 flex items-center justify-center shrink-0 mt-1">
+                <Bot size={16} className="text-accent-red" />
+              </div>
+            )}
             <div
-              key={i}
-              className={`flex gap-3 ${
-                msg.role === 'user' ? 'justify-end' : 'justify-start'
+              className={`max-w-[85%] rounded-2xl p-4 text-sm leading-relaxed ${
+                msg.role === 'user'
+                  ? 'bg-accent-red text-white font-medium shadow-lg'
+                  : 'bg-bg-card border border-border-subtle text-text-primary'
               }`}
             >
-              {msg.role === 'assistant' && (
-                <div className="w-8 h-8 rounded-lg bg-accent-red/20 border border-accent-red/30 flex items-center justify-center shrink-0">
-                  <Bot size={16} className="text-accent-red" />
-                </div>
-              )}
-
-              <div
-                className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-accent-red text-white font-medium shadow-md'
-                    : 'bg-bg-card border border-border-subtle text-text-primary'
-                }`}
-              >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              </div>
+              {msg.content}
             </div>
-          ))}
-
-          {loading && (
-            <div className="flex gap-3 items-center">
-              <div className="w-8 h-8 rounded-lg bg-accent-red/20 border border-accent-red/30 flex items-center justify-center shrink-0">
-                <Bot size={16} className="text-accent-red animate-pulse" />
+            {msg.role === 'user' && (
+              <div className="w-8 h-8 rounded-lg bg-bg-surface border border-border-subtle flex items-center justify-center shrink-0 mt-1">
+                <User size={16} className="text-text-muted" />
               </div>
-              <div className="bg-bg-card border border-border-subtle rounded-2xl px-4 py-2.5 text-xs text-text-muted font-mono flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-ping" />
-                Ciel is processing your response...
-              </div>
-            </div>
-          )}
+            )}
+          </div>
+        ))}
 
-          {statusMessage && (
-            <div className="p-3 rounded-xl bg-accent-green/10 border border-accent-green/30 text-accent-green text-xs font-mono flex items-center gap-2">
-              <CheckCircle2 size={14} />
-              {statusMessage}
+        {loading && (
+          <div className="flex gap-3 justify-start animate-pulse">
+            <div className="w-8 h-8 rounded-lg bg-accent-red/20 border border-accent-red/30 flex items-center justify-center shrink-0">
+              <Bot size={16} className="text-accent-red" />
             </div>
-          )}
+            <div className="bg-bg-card border border-border-subtle rounded-2xl p-4 text-xs font-mono text-text-muted flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent-red animate-ping" />
+              <span>Ciel is formulating dynamic question response...</span>
+            </div>
+          </div>
+        )}
 
-          <div ref={messagesEndRef} />
-        </div>
+        {statusMessage && (
+          <div className="p-3 rounded-xl bg-accent-red/10 border border-accent-red/20 text-accent-red text-xs font-mono text-center">
+            {statusMessage}
+          </div>
+        )}
       </main>
 
-      {/* Input Bar */}
-      <footer className="sticky bottom-0 z-40 bg-bg-primary/95 border-t border-border-subtle p-4 backdrop-blur-md">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="max-w-3xl w-full mx-auto flex items-center gap-2"
-        >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your response to Ciel..."
-            disabled={loading}
-            className="flex-1 bg-bg-card border border-border-subtle rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-border-active transition-colors disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || loading}
-            className="px-5 py-3 rounded-xl bg-accent-red hover:bg-accent-red/90 text-white font-medium text-sm flex items-center gap-2 transition-colors disabled:opacity-40 cursor-pointer"
-          >
-            <Send size={16} />
-            <span className="hidden sm:inline">Send</span>
-          </button>
-        </form>
-        <p className="text-[0.625rem] text-center text-text-muted font-mono mt-2 flex items-center justify-center gap-1">
-          <ShieldAlert size={10} className="text-accent-gold" />
-          Ciel validates all data via Action Engine before saving to your profile.
-        </p>
+      {/* Dynamic Interactive Input Panel */}
+      <footer className="sticky bottom-0 z-40 border-t border-border-subtle bg-bg-primary/95 backdrop-blur-md p-4">
+        <div className="max-w-3xl mx-auto space-y-3">
+          {/* Dynamic Single Select Chips */}
+          {activeQuestion?.type === 'single_select' && activeQuestion.options && (
+            <div className="space-y-2">
+              <p className="text-xs font-mono text-text-muted uppercase tracking-wider">{activeQuestion.question}</p>
+              <div className="flex flex-wrap gap-2">
+                {activeQuestion.options.map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => handleUserAnswer(opt)}
+                    className="px-4 py-2 rounded-xl bg-bg-card border border-border-subtle hover:border-accent-red hover:text-accent-red text-xs font-medium transition-all flex items-center gap-1.5"
+                  >
+                    <span>{opt}</span>
+                    <ChevronRight size={14} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Dynamic Multi Select Checkbox Chips */}
+          {activeQuestion?.type === 'multi_select' && activeQuestion.options && (
+            <div className="space-y-2">
+              <p className="text-xs font-mono text-text-muted uppercase tracking-wider">{activeQuestion.question}</p>
+              <div className="flex flex-wrap gap-2">
+                {activeQuestion.options.map((opt) => {
+                  const isSelected = multiSelectValues.includes(opt);
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => toggleMultiSelectOption(opt)}
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-medium transition-all flex items-center gap-2 ${
+                        isSelected
+                          ? 'bg-accent-red text-white border-accent-red glow-red'
+                          : 'bg-bg-card border-border-subtle text-text-secondary hover:border-border-strong'
+                      }`}
+                    >
+                      <CheckCircle2 size={14} className={isSelected ? 'text-white' : 'text-text-muted'} />
+                      <span>{opt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                disabled={multiSelectValues.length === 0}
+                onClick={() => handleUserAnswer(multiSelectValues)}
+                className="w-full py-2.5 rounded-xl bg-accent-red text-white text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              >
+                <span>Confirm {multiSelectValues.length} Selections</span>
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Dynamic Scale Range Slider */}
+          {activeQuestion?.type === 'scale' && (
+            <div className="space-y-3 bg-bg-card p-4 rounded-xl border border-border-subtle">
+              <div className="flex justify-between items-center text-xs font-mono">
+                <span className="text-text-muted">{activeQuestion.question}</span>
+                <span className="text-accent-red font-bold text-base">{scaleValue} Mins/Day</span>
+              </div>
+              <input
+                type="range"
+                min={activeQuestion.min ?? 30}
+                max={activeQuestion.max ?? 180}
+                step={activeQuestion.step ?? 15}
+                value={scaleValue}
+                onChange={(e) => setScaleValue(Number(e.target.value))}
+                className="w-full accent-accent-red"
+              />
+              <button
+                onClick={() => handleUserAnswer(scaleValue)}
+                className="w-full py-2.5 rounded-xl bg-accent-red text-white text-xs font-bold uppercase tracking-wider transition-all"
+              >
+                Set Daily Availability: {scaleValue} Mins
+              </button>
+            </div>
+          )}
+
+          {/* Standard Text or Number Input */}
+          {(!activeQuestion || activeQuestion.type === 'text' || activeQuestion.type === 'number') && (
+            <div className="flex gap-2">
+              <input
+                type={activeQuestion?.type === 'number' ? 'number' : 'text'}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUserAnswer(input)}
+                placeholder={activeQuestion?.question || 'Type your response to Ciel...'}
+                className="flex-1 px-4 py-3 rounded-xl bg-bg-card border border-border-subtle text-sm focus:outline-none focus:border-accent-red transition-all"
+              />
+              <button
+                onClick={() => handleUserAnswer(input)}
+                disabled={!input.trim() || loading}
+                className="px-5 py-3 rounded-xl bg-accent-red text-white hover:bg-accent-red/90 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          )}
+        </div>
       </footer>
     </div>
   );
