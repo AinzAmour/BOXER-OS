@@ -1,10 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { callProviderRouter } from '../src/ai/providerRouter';
-import { parseCielResponseEnvelope } from '../src/ai/cielResponseParser';
-import { executeRepairLoop } from '../src/ai/responseRepair';
-import type { CielMode } from '../src/types';
 
-// ── Server-Side Authoritative Ciel Prompts ──
+// ── Server-Side Authoritative Ciel Prompts ───────────────────────
 const CIEL_CORE_IDENTITY = `
 You are Ciel, the intelligence layer behind LIFE//OS.
 
@@ -121,17 +117,145 @@ function buildServerCielPrompt(mode: string = 'scheduling', userContext: string 
   ].join('\n');
 }
 
+// ── Environment Safe Lookup ──────────────────────────────────────
+function getEnvVar(key: string): string | undefined {
+  try {
+    if (typeof process !== 'undefined' && process && process.env) {
+      return process.env[key];
+    }
+  } catch {}
+  return undefined;
+}
+
+// ── Provider Router Implementation ───────────────────────────────
+async function callServerProviderRouter(params: {
+  systemPrompt: string;
+  formattedMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  userQuery: string;
+}): Promise<{ rawResponse: string; providerUsed: 'groq' | 'gemini' | 'local_ciel' }> {
+  const groqApiKey = getEnvVar('GROQ_API_KEY');
+  const geminiApiKey = getEnvVar('GEMINI_API_KEY');
+
+  const groqModel = getEnvVar('GROQ_MODEL') || 'llama-3.3-70b-versatile';
+  const geminiModel = getEnvVar('GEMINI_MODEL') || 'gemini-1.5-flash';
+
+  // 1. Groq API
+  if (groqApiKey) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqApiKey}`,
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: params.formattedMessages,
+          temperature: 0.7,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const reply = data.choices?.[0]?.message?.content;
+        if (reply) {
+          return { rawResponse: reply, providerUsed: 'groq' };
+        }
+      }
+    } catch (err) {
+      console.warn('[ServerGateway] Groq call failed:', err);
+    }
+  }
+
+  // 2. Gemini API
+  if (geminiApiKey) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: `${params.systemPrompt}\n\nUser Query:\n${params.userQuery}` },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (reply) {
+          return { rawResponse: reply, providerUsed: 'gemini' };
+        }
+      }
+    } catch (err) {
+      console.warn('[ServerGateway] Gemini call failed:', err);
+    }
+  }
+
+  return { rawResponse: '', providerUsed: 'local_ciel' };
+}
+
+// ── Envelope Parser Implementation ──────────────────────────────
+function parseServerEnvelope(rawResponse: string): { text: string; envelope: any | null; action: any | null; error?: string } {
+  if (!rawResponse || typeof rawResponse !== 'string') {
+    return { text: '', envelope: null, action: null };
+  }
+
+  const trimmed = rawResponse.trim();
+  const jsonRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+  const match = jsonRegex.exec(trimmed);
+
+  let jsonStr = '';
+  let textBeforeJson = trimmed;
+
+  if (match && match[1]) {
+    jsonStr = match[1].trim();
+    textBeforeJson = trimmed.substring(0, match.index).trim();
+  } else if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    jsonStr = trimmed;
+    textBeforeJson = '';
+  }
+
+  if (jsonStr) {
+    try {
+      const rawObj = JSON.parse(jsonStr);
+      if (rawObj.type && ['message', 'question', 'action'].includes(rawObj.type)) {
+        return {
+          text: rawObj.text || textBeforeJson || 'Processing...',
+          envelope: rawObj,
+          action: rawObj.type === 'action' ? rawObj.action : null,
+        };
+      }
+    } catch (err) {
+      return { text: textBeforeJson || trimmed, envelope: null, action: null, error: 'JSON parse error' };
+    }
+  }
+
+  return {
+    text: trimmed,
+    envelope: { protocol_version: '2.0', type: 'message', text: trimmed },
+    action: null,
+  };
+}
+
+// ── Serverless Gateway Handler ──────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Parse body safely
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const { prompt, mode, userContext, messages } = body;
 
-    const modeName: CielMode = (mode as CielMode) || 'scheduling';
+    const modeName = String(mode || 'scheduling');
     const userQuery = prompt || (Array.isArray(messages) && messages.length > 0
       ? messages[messages.length - 1]?.content
       : '');
@@ -140,10 +264,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Prompt or message content is required' });
     }
 
-    // 1. Build server-owned authoritative Ciel system prompt
+    // 1. Build server-owned system prompt
     const systemPrompt = buildServerCielPrompt(modeName, userContext || '{}');
 
-    // 2. Format conversation messages for LLM provider
+    // 2. Format messages array
     const formattedMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
     ];
@@ -158,37 +282,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       formattedMessages.push({ role: 'user', content: String(userQuery) });
     }
 
-    // 3. Call Provider Router (Groq -> Gemini -> Local Fallback)
-    const providerRes = await callProviderRouter({
+    // 3. Call Provider Router
+    const providerRes = await callServerProviderRouter({
       systemPrompt,
       formattedMessages,
       userQuery,
     });
 
-    // 4. Validate & Repair Loop (Max 2 retries if Zod schema validation fails)
     let finalEnvelopeText = providerRes.rawResponse;
     let finalProvider = providerRes.providerUsed;
 
     if (providerRes.rawResponse) {
-      const repairResult = await executeRepairLoop(
-        providerRes.rawResponse,
-        async (repairPrompt: string) => {
-          const repairMessages = [
-            ...formattedMessages,
-            { role: 'assistant' as const, content: providerRes.rawResponse },
-            { role: 'user' as const, content: repairPrompt },
-          ];
-          const repairCall = await callProviderRouter({
-            systemPrompt,
-            formattedMessages: repairMessages,
-            userQuery: repairPrompt,
-          });
-          return repairCall.rawResponse;
-        },
-        modeName
-      );
-
-      const parsedEnv = repairResult.parsed;
+      const parsedEnv = parseServerEnvelope(providerRes.rawResponse);
       if (parsedEnv.envelope) {
         finalEnvelopeText = JSON.stringify(parsedEnv.envelope);
       } else {
@@ -196,7 +301,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // If no raw response was generated, use Local Ciel Engine
+    // 4. Local Ciel Fallback Engine
     if (!finalEnvelopeText) {
       finalProvider = 'local_ciel';
       if (modeName === 'onboarding') {
@@ -222,25 +327,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           finalEnvelopeText = JSON.stringify({
             protocol_version: '2.0',
             type: 'question',
-            text: `Hello ${nameCandidate}. What is your age, height, and weight?`,
+            text: `Hello ${nameCandidate}. What are your current physical stats? (Age, height, weight)`,
             question: {
-              type: 'number',
-              field: 'age',
-              question: 'Enter your age',
-              min: 10,
-              max: 120,
+              type: 'text',
+              field: 'stats',
+              question: 'Enter your age, height (cm), and weight (kg)',
             },
           });
         } else if (userCount === 3) {
           finalEnvelopeText = JSON.stringify({
             protocol_version: '2.0',
             type: 'question',
-            text: `Got it. What are your primary goals for personal mastery?`,
+            text: `Got it. What are your primary goals for personal growth and training?`,
             question: {
               type: 'multi_select',
               field: 'goals',
-              question: 'Select your primary goals',
-              options: ['Kickboxing', 'Cybersecurity', 'Mentalism', 'Calisthenics', 'Nutrition', 'Other (Type custom)', 'Not sure', 'Skip for now'],
+              question: 'Select or type your primary goals',
+              options: [
+                'Kickboxing / Martial Arts',
+                'Cybersecurity & CTFs',
+                'Mentalism & Cognitive Mastery',
+                'Calisthenics & Strength',
+                'Running & Conditioning',
+                'Focus & Study System',
+                'Other (Type custom)',
+                'Not sure',
+                'Skip for now',
+              ],
               allow_custom: true,
             },
           });
@@ -248,7 +361,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           finalEnvelopeText = JSON.stringify({
             protocol_version: '2.0',
             type: 'action',
-            text: `Profile confirmed. Initializing your personal skill graph, baseline assessment, daily missions, and phase roadmap.`,
+            text: `Profile confirmed for ${nameCandidate}. Initializing your personalized skill graph, baseline assessment, daily missions, and phase roadmap.`,
             action: {
               action: 'onboarding_complete',
               onboarding_complete: true,
@@ -289,7 +402,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err) {
     console.error('[API/AI Gateway Error]:', err);
-    // Graceful error recovery: Return valid 200 OK JSON envelope so app never crashes
     return res.status(200).json({
       reply: JSON.stringify({
         protocol_version: '2.0',
