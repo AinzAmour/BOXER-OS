@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, Mail, Key, ShieldCheck, ArrowRight, UserPlus, LogIn } from 'lucide-react';
+import { Mail, Key, ShieldCheck, ArrowRight, UserPlus, LogIn } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface AuthPageProps {
