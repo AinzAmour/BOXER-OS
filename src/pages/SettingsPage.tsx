@@ -11,8 +11,8 @@ export function SettingsPage({ onLogout, userEmail }: SettingsPageProps) {
 
   const handleExport = () => {
     const data = {
-      app: 'BOXER//OS',
-      version: '0.1.0',
+      app: 'LIFE//OS',
+      version: '1.0.0',
       exported_at: new Date().toISOString(),
     };
 
@@ -20,7 +20,7 @@ export function SettingsPage({ onLogout, userEmail }: SettingsPageProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `boxer-os-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `life-os-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -35,8 +35,8 @@ export function SettingsPage({ onLogout, userEmail }: SettingsPageProps) {
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        if (data.app !== 'BOXER//OS') {
-          alert('Invalid BOXER//OS backup file.');
+        if (data.app !== 'LIFE//OS' && data.app !== 'BOXER//OS') {
+          alert('Invalid backup file.');
           return;
         }
         alert('Backup restored successfully!');
@@ -59,15 +59,15 @@ export function SettingsPage({ onLogout, userEmail }: SettingsPageProps) {
       <div className="glass-card p-5">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-xl bg-accent-red flex items-center justify-center glow-red">
-            <span className="text-white font-bold text-lg" style={{ fontFamily: 'var(--font-mono)' }}>B</span>
+            <span className="text-white font-bold text-lg" style={{ fontFamily: 'var(--font-mono)' }}>L</span>
           </div>
           <div>
-            <h3 className="text-base font-bold">BOXER<span className="text-accent-red">//</span>OS</h3>
-            <p className="text-xs text-text-muted font-mono">v0.1.0</p>
+            <h3 className="text-base font-bold">LIFE<span className="text-accent-red">//</span>OS</h3>
+            <p className="text-xs text-text-muted font-mono">v1.0.0</p>
           </div>
         </div>
         <p className="text-xs text-text-secondary">
-          Tactical boxing fitness tracker. Track baselines, diagnose running difficulty, train boxing fundamentals, time rounds, manage nutrition — synced across devices.
+          Personal Development & Skill Mastery Operating System — BODY, MIND, and TECH domain progression, Skill Graph, Adaptive Assessments, and Serverless AI Executive Assistant.
         </p>
       </div>
 

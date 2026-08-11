@@ -66,17 +66,17 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
         {/* Header Logo */}
         <div className="text-center space-y-2">
           <div className="w-12 h-12 rounded-2xl bg-accent-red flex items-center justify-center mx-auto glow-red">
-            <span className="text-white font-bold text-xl" style={{ fontFamily: 'var(--font-mono)' }}>B</span>
+            <span className="text-white font-bold text-xl" style={{ fontFamily: 'var(--font-mono)' }}>L</span>
           </div>
 
           <h1 className="text-2xl font-black tracking-tight">
-            <span>BOXER</span>
+            <span>LIFE</span>
             <span className="text-accent-red">//</span>
             <span className="text-text-secondary">OS</span>
           </h1>
 
           <p className="text-xs text-text-muted font-mono tracking-widest uppercase">
-            FIGHTER ACCESS GATEWAY
+            PERSONAL ACCESS GATEWAY
           </p>
         </div>
 
@@ -152,7 +152,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
               type="email"
               required
               className="input"
-              placeholder="fighter@boxeros.app"
+              placeholder="fighter@lifeos.app"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -200,11 +200,11 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
               <span>Authenticating...</span>
             ) : mode === 'signin' ? (
               <>
-                <LogIn size={16} /> Enter BOXER//OS
+                <LogIn size={16} /> Enter LIFE//OS
               </>
             ) : (
               <>
-                <UserPlus size={16} /> Create Fighter Profile
+                <UserPlus size={16} /> Create Profile
               </>
             )}
           </button>
