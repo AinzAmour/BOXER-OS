@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.skills (
   sync_version INTEGER DEFAULT 1
 );
 
--- ── 2. SKILL PREREQUISITES (Unlock DAG) ──────────────────────
+-- ── 2. SKILL PREREQUISITES (Unlock DAG Join Table) ───────────
 CREATE TABLE IF NOT EXISTS public.skill_prerequisites (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   skill_id UUID REFERENCES public.skills(id) ON DELETE CASCADE NOT NULL,
@@ -92,11 +92,11 @@ ALTER TABLE public.knowledge_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_sessions ENABLE ROW LEVEL SECURITY;
 
--- Apply RLS policies
+-- Apply RLS policies to user-owned tables
 DO $$
 DECLARE t TEXT;
 BEGIN
-  FOR t IN SELECT unnest(ARRAY['skills', 'skill_prerequisites', 'knowledge_assessments', 'quests', 'ai_sessions']) LOOP
+  FOR t IN SELECT unnest(ARRAY['skills', 'knowledge_assessments', 'quests', 'ai_sessions']) LOOP
     EXECUTE format('
       DROP POLICY IF EXISTS "Users access own %I" ON public.%I;
       CREATE POLICY "Users access own %I" ON public.%I
@@ -104,3 +104,12 @@ BEGIN
     ', t, t, t, t);
   END LOOP;
 END $$;
+
+-- Policy for join table skill_prerequisites (checks user_id via parent skill)
+DROP POLICY IF EXISTS "Users access own skill_prerequisites" ON public.skill_prerequisites;
+CREATE POLICY "Users access own skill_prerequisites" ON public.skill_prerequisites
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM public.skills s WHERE s.id = skill_id AND s.user_id = auth.uid()
+    )
+  );
