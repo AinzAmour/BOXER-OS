@@ -18,12 +18,18 @@ export function useAuth() {
   useEffect(() => {
     let isMounted = true;
 
+    // Hard 200ms safety timeout: guarantees app unlocks immediately on page refresh
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setLoading(false);
+      }
+    }, 200);
+
     async function initAuth() {
       try {
         const { data, error } = await supabase.auth.getSession();
         if (error) {
-          console.warn('Supabase session warning, resetting auth state:', error);
-          // If session is invalid, clear stale auth items so app doesn't freeze
+          console.warn('Supabase session warning, clearing stale token:', error);
           localStorage.removeItem('sb-dwlwcabszyvszlgeicek-auth-token');
         } else if (isMounted && data?.session) {
           setSession(data.session);
@@ -34,6 +40,7 @@ export function useAuth() {
       } finally {
         if (isMounted) {
           setLoading(false);
+          clearTimeout(safetyTimer);
         }
       }
     }
@@ -51,6 +58,7 @@ export function useAuth() {
 
     return () => {
       isMounted = false;
+      clearTimeout(safetyTimer);
       authListener.subscription.unsubscribe();
     };
   }, []);
