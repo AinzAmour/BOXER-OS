@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   BOXER//OS — Tactical Dark Theme
+   ───────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Core Palette ── */
+  --color-bg-primary: #0b0d10;
+  --color-bg-secondary: #141820;
+  --color-bg-card: #1a1f2e;
+  --color-bg-card-hover: #222839;
+  --color-bg-elevated: #252b3d;
+
+  /* ── Accent Colors ── */
+  --color-accent-red: #ff3355;
+  --color-accent-cyan: #00f0ff;
+  --color-accent-gold: #ffb703;
+  --color-accent-teal: #2ec4b6;
+  --color-accent-purple: #a855f7;
+
+  /* ── Text ── */
+  --color-text-primary: #f0f2f5;
+  --color-text-secondary: #8b95a8;
+  --color-text-muted: #555e70;
+
+  /* ── Borders ── */
+  --color-border-subtle: #1e2433;
+  --color-border-default: #2a3245;
+  --color-border-active: #3a4560;
+
+  /* ── Status ── */
+  --color-status-success: #22c55e;
+  --color-status-warning: #f59e0b;
+  --color-status-danger: #ef4444;
+  --color-status-info: #3b82f6;
+
+  /* ── Fonts ── */
+  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* ── Radii ── */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+}
+
+/* ── Base Styles ── */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-active);
+}
+
+/* ── Glassmorphism Card ── */
+.glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(26, 31, 46, 0.85),
+    rgba(20, 24, 32, 0.95)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.glass-card-hover {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-card-hover:hover {
+  border-color: var(--color-border-active);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+/* ── Glow Effects ── */
+.glow-red {
+  box-shadow: 0 0 15px rgba(255, 51, 85, 0.25), 0 0 40px rgba(255, 51, 85, 0.08);
+}
+.glow-cyan {
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.25), 0 0 40px rgba(0, 240, 255, 0.08);
+}
+.glow-gold {
+  box-shadow: 0 0 15px rgba(255, 183, 3, 0.25), 0 0 40px rgba(255, 183, 3, 0.08);
+}
+.glow-teal {
+  box-shadow: 0 0 15px rgba(46, 196, 182, 0.25), 0 0 40px rgba(46, 196, 182, 0.08);
+}
+
+/* ── Pulse Animation ── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── Sync Spin ── */
+@keyframes sync-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-sync-spin {
+  animation: sync-spin 1.2s linear infinite;
+}
+
+/* ── Stat Number Style ── */
+.stat-number {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ── Timer Display ── */
+.timer-display {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: clamp(3rem, 15vw, 8rem);
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+/* ── Button Base ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  user-select: none;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--color-accent-red);
+  color: white;
+}
+.btn-primary:hover {
+  background: #e62d4a;
+  box-shadow: 0 0 20px rgba(255, 51, 85, 0.3);
+}
+
+.btn-secondary {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-default);
+}
+.btn-secondary:hover {
+  border-color: var(--color-accent-cyan);
+  color: var(--color-accent-cyan);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+.btn-ghost:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-card);
+}
+
+/* ── Input Base ── */
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-family: var(--font-sans);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--color-accent-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1);
+}
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ── Label ── */
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+/* ── Badge ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Mobile Safe Area ── */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
