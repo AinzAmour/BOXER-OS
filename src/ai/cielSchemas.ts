@@ -1,46 +1,46 @@
 import { z } from 'zod';
 
 export const UserConstraintsSchema = z.object({
-  equipment: z.array(z.string()).optional(),
-  daily_minutes: z.number().min(5).max(480).optional(),
-  budget: z.string().optional(),
-  location: z.string().optional(),
-  cannot_do: z.array(z.string()).optional(),
+  equipment: z.array(z.string()).nullish(),
+  daily_minutes: z.number().nullish(),
+  budget: z.string().nullish(),
+  location: z.string().nullish(),
+  cannot_do: z.array(z.string()).nullish(),
 });
 
 export const ProfileProposalSchema = z.object({
   name: z.string().min(1).max(100),
-  age: z.number().int().min(10).max(120),
-  height_cm: z.number().min(100).max(250),
-  weight_kg: z.number().min(30).max(300),
-  diet_type: z.string().default('standard'),
-  is_halal: z.boolean().default(false),
-  soya_free: z.boolean().default(false),
-  enabled_modules: z.array(z.string()).optional(),
-  constraints: UserConstraintsSchema.optional(),
+  age: z.coerce.number().min(1).max(120),
+  height_cm: z.coerce.number().min(50).max(300),
+  weight_kg: z.coerce.number().min(20).max(300),
+  diet_type: z.string().nullish().transform((v) => v || 'standard'),
+  is_halal: z.boolean().nullish().transform((v) => Boolean(v)),
+  soya_free: z.boolean().nullish().transform((v) => Boolean(v)),
+  enabled_modules: z.array(z.string()).nullish(),
+  constraints: UserConstraintsSchema.nullish(),
 });
 
 export const SkillProposalSchema = z.object({
   domain: z.enum(['body', 'mind', 'tech']),
   category: z.string().min(1).max(50),
   name: z.string().min(1).max(100),
-  state: z.enum(['unknown', 'discovered']), // Ciel can only propose unknown or discovered!
+  state: z.enum(['unknown', 'discovered']).nullish().transform((v) => v || 'discovered'),
 });
 
 export const QuestProposalSchema = z.object({
-  title: z.string().min(3).max(200),
+  title: z.string().min(2).max(200),
   domain: z.enum(['body', 'mind', 'tech']),
-  xp_reward: z.number().int().min(5).max(200), // Capped XP reward
-  target_skill_names: z.array(z.string()).default([]),
-  estimated_minutes: z.number().int().min(5).max(180).optional(),
-  evidence_required: z.string().optional(),
+  xp_reward: z.coerce.number().nullish().transform((v) => Math.min(Math.max(v || 50, 5), 200)),
+  target_skill_names: z.array(z.string()).nullish().transform((v) => v || []),
+  estimated_minutes: z.coerce.number().nullish(),
+  evidence_required: z.string().nullish(),
 });
 
 export const EvidenceProposalSchema = z.object({
   skill_name: z.string().min(1).max(100),
   source: z.enum(['onboarding', 'assessment', 'session_log', 'self_report']),
   claim: z.string().min(1).max(500),
-  value: z.number().optional(),
+  value: z.coerce.number().nullish(),
   confidence: z.enum(['self_reported', 'observed', 'assessed']),
 });
 
@@ -54,11 +54,11 @@ export const CielActionSchema = z.object({
     'reschedule',
     'none',
   ]),
-  onboarding_complete: z.boolean().optional(),
-  profile: ProfileProposalSchema.nullable().optional(),
-  skills: z.array(SkillProposalSchema).nullable().optional(),
-  quests: z.array(QuestProposalSchema).nullable().optional(),
-  evidence: EvidenceProposalSchema.nullable().optional(),
+  onboarding_complete: z.boolean().nullish(),
+  profile: ProfileProposalSchema.nullish(),
+  skills: z.array(SkillProposalSchema).nullish(),
+  quests: z.array(QuestProposalSchema).nullish(),
+  evidence: EvidenceProposalSchema.nullish(),
 });
 
 export type CielAction = z.infer<typeof CielActionSchema>;

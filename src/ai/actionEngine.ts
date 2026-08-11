@@ -4,6 +4,7 @@ import type {
   CielAction,
   ProfileProposal,
   SkillProposal,
+  QuestProposal,
   EvidenceProposal,
 } from './cielSchemas';
 import type {
@@ -183,8 +184,24 @@ export async function executeCielAction(
         const profilePayload: ProfileProposal = action.profile;
         const profileId = generateUUID();
 
-        // Default modules based on profile preferences if not provided
-        const enabledModules = profilePayload.enabled_modules || ['fitness', 'nutrition', 'timer'];
+        // Map high-level domains ('body', 'mind', 'tech') to specific UI module keys
+        const rawModules = profilePayload.enabled_modules || ['body', 'mind', 'tech'];
+        const mappedModules = new Set<string>();
+        for (const m of rawModules) {
+          if (m === 'body') {
+            mappedModules.add('fitness');
+            mappedModules.add('boxing');
+            mappedModules.add('running');
+            mappedModules.add('nutrition');
+            mappedModules.add('timer');
+          } else if (m === 'mind') {
+            mappedModules.add('mind');
+          } else if (m === 'tech') {
+            mappedModules.add('cyber');
+          } else {
+            mappedModules.add(m);
+          }
+        }
 
         const profile: Profile = {
           id: profileId,
@@ -195,13 +212,13 @@ export async function executeCielAction(
           weight_kg: profilePayload.weight_kg,
           body_fat_pct: null,
           waist_inches: 32,
-          diet_type: profilePayload.diet_type,
+          diet_type: profilePayload.diet_type || 'halal',
           is_halal: profilePayload.is_halal,
           soya_free: profilePayload.soya_free,
           level: 1,
           xp: 100,
-          constraints: profilePayload.constraints,
-          enabled_modules: enabledModules,
+          constraints: profilePayload.constraints || {},
+          enabled_modules: Array.from(mappedModules),
           created_at: now,
           updated_at: now,
           device_id: deviceId,
@@ -243,48 +260,60 @@ export async function executeCielAction(
         await syncManager.queueChange('assessments', 'INSERT', baselineId, baseline as unknown as Record<string, unknown>);
         createdIds.push(baselineId);
 
-        // Resolve and create initial skills
-        if (action.skills && action.skills.length > 0) {
-          for (const s of action.skills) {
-            const skillId = await resolveOrCreateSkill(s, userId);
-            createdIds.push(skillId);
-          }
+        // Resolve and create initial skills (with fallbacks if null)
+        const skillsToCreate: SkillProposal[] = (action.skills && action.skills.length > 0)
+          ? action.skills
+          : [
+              { domain: 'body', category: 'boxing', name: 'Orthodox Stance & Guard', state: 'discovered' },
+              { domain: 'body', category: 'calisthenics', name: 'Strict Push-ups', state: 'discovered' },
+              { domain: 'tech', category: 'linux', name: 'Linux CLI Navigation', state: 'discovered' },
+              { domain: 'mind', category: 'focus', name: 'Deep Work Focus', state: 'discovered' },
+            ];
+
+        for (const s of skillsToCreate) {
+          const skillId = await resolveOrCreateSkill(s, userId);
+          createdIds.push(skillId);
         }
 
-        // Create initial quests
-        if (action.quests && action.quests.length > 0) {
-          for (const q of action.quests) {
-            const targetSkillIds: string[] = [];
-            for (const name of q.target_skill_names) {
-              const skillId = await resolveOrCreateSkill(
-                { domain: q.domain, category: 'general', name, state: 'discovered' },
-                userId
-              );
-              targetSkillIds.push(skillId);
-            }
+        // Create initial quests (with fallbacks if null)
+        const questsToCreate: QuestProposal[] = (action.quests && action.quests.length > 0)
+          ? action.quests
+          : [
+              { title: 'Complete 3 Shadowboxing Rounds (3 min each)', domain: 'body', xp_reward: 75, target_skill_names: ['Orthodox Stance & Guard'], estimated_minutes: 15 },
+              { title: 'Linux Terminal Commands Practice', domain: 'tech', xp_reward: 50, target_skill_names: ['Linux CLI Navigation'], estimated_minutes: 20 },
+            ];
 
-            const questId = generateUUID();
-            const quest: Quest = {
-              id: questId,
-              user_id: userId,
-              title: q.title,
-              domain: q.domain,
-              xp_reward: q.xp_reward,
-              is_completed: false,
-              completed_at: null,
-              target_skill_ids: targetSkillIds,
-              estimated_minutes: q.estimated_minutes,
-              evidence_required: q.evidence_required,
-              created_at: now,
-              updated_at: now,
-              device_id: deviceId,
-              deleted_at: null,
-              sync_version: 1,
-            };
-            await db.quests.put(quest);
-            await syncManager.queueChange('quests', 'INSERT', questId, quest as unknown as Record<string, unknown>);
-            createdIds.push(questId);
+        for (const q of questsToCreate) {
+          const targetSkillIds: string[] = [];
+          for (const name of q.target_skill_names) {
+            const skillId = await resolveOrCreateSkill(
+              { domain: q.domain, category: 'general', name, state: 'discovered' },
+              userId
+            );
+            targetSkillIds.push(skillId);
           }
+
+          const questId = generateUUID();
+          const quest: Quest = {
+            id: questId,
+            user_id: userId,
+            title: q.title,
+            domain: q.domain,
+            xp_reward: q.xp_reward,
+            is_completed: false,
+            completed_at: null,
+            target_skill_ids: targetSkillIds,
+            estimated_minutes: q.estimated_minutes,
+            evidence_required: q.evidence_required,
+            created_at: now,
+            updated_at: now,
+            device_id: deviceId,
+            deleted_at: null,
+            sync_version: 1,
+          };
+          await db.quests.put(quest);
+          await syncManager.queueChange('quests', 'INSERT', questId, quest as unknown as Record<string, unknown>);
+          createdIds.push(questId);
         }
 
         // Create default Nutrition Target

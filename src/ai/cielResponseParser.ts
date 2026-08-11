@@ -30,8 +30,10 @@ export function parseCielResponse(rawResponse: string): ParsedCielResponse {
     const result = CielActionSchema.safeParse(rawObj);
 
     if (result.success) {
+      // Strips JSON block from text output so raw JSON is never rendered in chat UI
+      const cleanText = textBeforeJson || (result.data.action === 'onboarding_complete' ? 'Profile confirmed. Initializing your personal system...' : 'Action processed successfully.');
       return {
-        text: textBeforeJson || rawResponse.trim(),
+        text: cleanText,
         action: result.data,
       };
     } else {

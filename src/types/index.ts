@@ -15,11 +15,11 @@ export interface SyncMeta {
 
 // ── Constraints & Preferences ─────────────────────────────────
 export interface UserConstraints {
-  equipment?: string[];
-  daily_minutes?: number;
-  budget?: string;
-  location?: string;
-  cannot_do?: string[];
+  equipment?: string[] | null;
+  daily_minutes?: number | null;
+  budget?: string | null;
+  location?: string | null;
+  cannot_do?: string[] | null;
 }
 
 // ── Profile ──────────────────────────────────────────────────
@@ -162,7 +162,7 @@ export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export interface SkillEvidence {
   source: 'onboarding' | 'assessment' | 'session_log' | 'self_report';
   claim: string;
-  value?: number;
+  value?: number | null;
   confidence: 'self_reported' | 'observed' | 'assessed';
   recorded_at: string;
 }
@@ -205,8 +205,8 @@ export interface Quest extends SyncMeta {
   is_completed: boolean;
   completed_at: string | null;
   target_skill_ids: string[];
-  estimated_minutes?: number;
-  evidence_required?: string;
+  estimated_minutes?: number | null;
+  evidence_required?: string | null;
 }
 
 // ── Ciel Intelligence Layer & Audit ──────────────────────────
